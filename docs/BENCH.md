@@ -13,7 +13,7 @@ ipcoding-bench/
 ├── bench_stt.py          # 실험 A: 후보 STT × 30문장 → results_stt.csv
 ├── bench_llm.py          # 실험 B: Ollama 후보 × (실험 A의 실제 오인식 전사) → results_llm.csv
 ├── prompts/
-│   └── refine_v0.txt     # 시스템 프롬프트 (기술설계서 §3.5)
+│   └── refine_v0~v2.txt  # 시스템 프롬프트 (0.6 반복 산출, v2가 확정본 — 기술설계서 §3.5)
 ├── dictionary_seed.json  # 실험 A 산출물: 오인식 → 표기 치환 쌍
 ├── results_stt.csv
 ├── results_llm.csv
@@ -77,9 +77,9 @@ ipcoding-bench/
 
 ## 4. 실험 B — LLM 교정·정돈
 
-- 후보: `qwen3.5:4b`, `qwen3.5:9b`, `kanana 1.5 8b`(gguf 직접 또는 Ollama 등록), `gemma4:e4b`, 참고 `EXAONE 7.8B`(출하 불가, 상한선 측정).
+- 후보: `qwen3.5:4b`, `qwen3.5:9b` 2종으로 확정 (2026-07-08 결정 — kanana 1.5 8b는 Ollama 라이브러리 부재로 gguf 직접 등록 비용 대비 제외, gemma4:e4b 제외, EXAONE 7.8B는 출하 불가 참고용이라 제외. 2종이 모두 판정 기준 미달일 때만 후보 재확장).
 - 입력: 실험 A에서 **선정된 STT가 실제로 출력한 전사문 30개** (사전 치환 적용 후 상태 — 실제 파이프라인과 동일 지점).
-- 프롬프트: `prompts/refine_v0.txt` 고정. 모델별 씽킹 모드는 **꺼짐**으로 통일 (지연 폭주 방지 — Qwen3.5 Small은 기본 꺼짐).
+- 프롬프트: `prompts/refine_v0.txt`에서 시작, §6의 0.6 반복으로 개선(v2로 확정 — 사이클 내 모델 간 비교는 같은 프롬프트 파일 고정). 모델별 씽킹 모드는 **꺼짐**으로 통일 (지연 폭주 방지 — Qwen3.5 Small은 기본 꺼짐).
 - 지표:
   - **교정 성공률**: 잔존 오인식(사전이 못 잡은 것)을 고쳤는가 — 문장별 O/X
   - **의도 보존**: 요구사항 추가/누락/응답사고(입력에 답해버림) 발생 여부 — 발생 즉시 해당 모델 감점 기록
@@ -93,7 +93,7 @@ ipcoding-bench/
 1. 실행 환경 (맥 모델, 램, macOS, 마이크)
 2. 실험 A 결과표 + 선정 STT와 근거
 3. 시드 사전 v0 (개수, 대표 예시)
-4. 실험 B 결과표 + 선정 LLM과 근거 + 프롬프트 개선 이력(v0→v1 변경점과 이유)
+4. 실험 B 결과표 + 선정 LLM과 근거 + 프롬프트 개선 이력(v0→v2 변경점과 이유)
 5. 확정 스택 요약 + 예상 파이프라인 지연 (T_raw / T_first_token / T_ready 추정)
 6. PRD 반영 사항 (§10-4, 5, 6 결론)
 
@@ -104,5 +104,5 @@ ipcoding-bench/
 - [ ] 0.3 bench_stt.py 실행 → results_stt.csv
 - [ ] 0.4 dictionary_seed.json 작성
 - [ ] 0.5 ollama pull 후보 4종 → bench_llm.py → results_llm.csv
-- [ ] 0.6 실패 사례 보고 프롬프트 v1 반영, 재실행
+- [ ] 0.6 실패 사례 보고 프롬프트 개선 반영(v1·v2), 재실행
 - [ ] 0.7 REPORT.md 작성, PRD §10 갱신
