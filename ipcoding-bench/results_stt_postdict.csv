@@ -1,0 +1,31 @@
+model,condition,sentence_id,type,transcript,cer,terms_hit,terms_total,rtf
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s01,A,이 컴포넌트 useState 말고 useReducer으로 리팩토링 해줘,0.0541,2,2,0.1203
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s02,A,useEffect의 cleanup 함수 리턴하는 거 빠졌으니까 추가해줘,0.0256,2,2,0.0775
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s03,A,async await로 바꾸고 try catch로 에러 핸들링 해줘,0.0000,4,4,0.1254
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s04,A,이 함수 TypeScript Generic으로 Type 잡아줘,0.3929,1,1,0.1355
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s05,A,React Query로 캐싱하게 바꾸고 staleTime 5분으로 설정해줘,0.0000,2,2,0.1339
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s06,A,git rebase로 커밋 세개를 하나로 squash해줘,0.0606,2,2,0.1500
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s07,A,Dockerfile에서 멀티 스테이지 빌드로 이미지 사이즈 줄여줘,0.0286,1,1,0.1162
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s08,A,이 API 엔드포인트에 rate limiting mid layer 붙여줘,0.2571,2,2,0.1140
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s09,A,Tailwind로 다크모드 대응하는 클래스 추가해줘,0.0000,1,1,0.1567
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s10,A,cmux에서 새 pane 열어서 테스트 워처 돌려줘,0.0000,2,2,0.1009
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s11,B,방금 수정한 부분 다시 원래대로 되돌려줘,0.0000,0,0,0.1728
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s12,B,이 파일에서 중복되는 로직 찾아서 함수로 뽑아줘,0.0000,0,0,0.1233
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s13,B,변수 이름들 좀 더 명확하게 바꿔줘,0.0000,0,0,0.1709
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s14,B,주석 달아줘 근데 너무 길게는 말고,0.0000,0,0,0.1592
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s15,B,이거 왜 안되는지 원인부터 찾아줘,0.0526,0,0,0.1694
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s16,B,성능 문제 있는 부분 프로파일링해서 알려줘,0.0000,0,0,0.1243
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s17,C,npm run dev하고 error log 보여줘,0.3750,1,1,0.1844
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s18,C,pytest로 유닛 테스트 돌리고 실패한 것만 정리해줘,0.0000,1,1,0.1704
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s19,C,"main branch에 rebase하고, force push 해줘",0.2424,3,3,0.1299
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s20,C,environment variable에서 API key 읽어오기 바꿔줘,0.0256,2,2,0.1143
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s21,D,커밋해줘,0.0000,0,0,0.2005
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s22,D,테스트 돌려,0.0000,0,0,0.2279
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s23,D,Build 다시 해봐,0.6250,0,0,0.2169
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s24,D,린트 에러 고쳐줘,0.0000,0,0,0.1907
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s25,E,로그인 session이 완료됐을 때 Redirect라는 기능을 수정해줘 그리고 완료되면 테스트 코드도 작성해줘,,0,0,0.0717
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s26,E,지금 검색기는 느린데 디바운싱 추가하고 디바운싱 추가해서 API 호출 줄여줘,,0,0,0.0823
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s27,E,결제 모듈에서 에러 핸들링 로직을 리페트링하고 실패했을 때 재시도를 3번 할 수 있도록 기능 추가해줘,,0,0,0.0578
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s28,E,다크모드 토글이 새로고침했을 때 풀리는 버그가 있어 다크모드와 같은 컬러모드는 localStorage에 저장하도록 기능을 추가해줘,,0,0,0.0612
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s29,E,PR 올리기 전에는 콘솔로 지워주고 커밋 메시지를 잘 정리해서 작성해줘,,0,0,0.0739
+ggml-large-v3-turbo-q5_0.bin,with_prompt+dict,s30,E,모바일 환경에서 깨지는 컴포넌트들 다 찾고 반응형 디자인에 대응할 수 있도록 수정해줘,,0,0,0.0730

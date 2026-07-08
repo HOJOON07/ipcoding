@@ -1,0 +1,19 @@
+[
+  {"spoken": "Environment variable", "written": "environment variable"},
+  {"spoken": "Main branch", "written": "main branch"},
+  {"spoken": "Try catch", "written": "try catch"},
+  {"spoken": "StaleTime", "written": "staleTime"},
+  {"spoken": "Cleanup", "written": "cleanup"},
+  {"spoken": "Async", "written": "async"},
+  {"spoken": "Docker 파일", "written": "Dockerfile"},
+  {"spoken": "파이 테스트", "written": "pytest"},
+  {"spoken": "스쿼시", "written": "squash"},
+  {"spoken": "페인", "written": "pane"},
+  {"spoken": "링트", "written": "린트"},
+  {"spoken": "코믹 메시지", "written": "커밋 메시지"},
+  {"spoken": "거미 태조", "written": "커밋해줘"},
+  {"spoken": "제시도", "written": "재시도"},
+  {"spoken": "로컬스토리지", "written": "localStorage"},
+  {"spoken": "로컬스토리", "written": "localStorage"},
+  {"spoken": "paste 코드", "written": "테스트 코드"}
+]
