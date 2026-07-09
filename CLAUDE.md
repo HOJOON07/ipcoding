@@ -19,7 +19,7 @@
 
 - 모듈 구조는 TDD §1을 따른다. 모듈 간 의존은 단방향: 모든 모듈 → `SessionCoordinator`로 이벤트 전달, 역방향 직접 호출 금지.
 - **상태 전이는 `SessionCoordinator`만 수행한다.** 다른 모듈이 상태를 바꾸거나 자체 상태 머신을 갖지 않는다. 전이표는 TDD §2가 유일한 정본.
-- UI 갱신과 상태 머신은 `@MainActor`. 추론(whisper/llama)은 전용 백그라운드 큐, 결과만 MainActor로.
+- UI 갱신과 상태 머신은 `@MainActor`. 추론(whisper/llama)은 MainActor 밖에서 실행하고(엔진 actor 격리로 컨텍스트 접근 직렬화) 결과만 MainActor로.
 - HUD(NSPanel)는 절대 key window가 되지 않는다 (포커스를 뺏으면 주입이 무너진다).
 - LLM 실패 시 항상 원문 폴백 (PRD 원칙 3). 폴백 경로를 제거하는 변경은 금지.
 

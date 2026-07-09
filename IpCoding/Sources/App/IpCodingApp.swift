@@ -17,6 +17,8 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private let hotkeyManager = HotkeyManager()
     private let audioCapture = AudioCapture()
+    private let modelManager = ModelManager()
+    private let transcribeEngine = TranscribeEngine()
     private let logger = Logger(subsystem: "com.hojoon.ipcoding", category: "app")
     /// 임시 배선의 Task 홉 순서 보장용 — down/up이 각각 세대를 올려, 늦게 실행된
     /// start가 이미 끝난 세션을 되살리지 못하게 한다 (1.8에서 코디네이터 직렬 소비로 대체).
@@ -43,7 +45,32 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
 
         statusItem = item
 
+        prepareModels()
         startHotkey()
+    }
+
+    /// 태스크 1.4·1.5: 모델 디렉토리 보장 + whisper 로드·워밍업 (전용 백그라운드는 actor가 담당).
+    private func prepareModels() {
+        do {
+            try modelManager.ensureModelsDirectory()
+        } catch {
+            logger.error("모델 디렉토리 생성 실패: \(String(describing: error), privacy: .public)")
+        }
+        let turbo = ModelManager.whisperTurbo
+        guard modelManager.isInstalled(turbo) else {
+            logger.warning("STT 모델 \(turbo.filename, privacy: .public) 없음 — 수동 배치 필요")
+            return
+        }
+        Task {
+            do {
+                let path = try modelManager.resolvedPath(for: turbo)
+                try await transcribeEngine.load(modelPath: path.path)
+                await transcribeEngine.warmUp()
+                logger.info("STT 엔진 준비 완료")
+            } catch {
+                logger.error("STT 엔진 준비 실패: \(String(describing: error), privacy: .public)")
+            }
+        }
     }
 
     /// 태스크 1.2: 이벤트 탭 시작. 코디네이터(1.8) 전까지는 델리게이트를 앱이 맡아 로그로 검증.
@@ -93,6 +120,30 @@ extension IpCodingApp: HotkeyManagerDelegate {
             #if DEBUG
             self.dumpCaptureForVerification(samples)
             #endif
+            await self.transcribeAndReport(samples)
+        }
+    }
+
+    /// 태스크 1.5 검증용 임시 배선: 캡처 → 전사 → 로그. HUD 표시(1.9)·주입(1.7) 전 단계.
+    /// 전사 텍스트는 개인 데이터라, 결과는 길이만 로깅한다. 내용 확인은 DEBUG 파일 덤프로 한정.
+    private func transcribeAndReport(_ samples: [Float]) async {
+        guard !samples.isEmpty else { return }
+        guard await transcribeEngine.isLoaded else {
+            logger.warning("[stt] 엔진 미준비 — 전사 생략")
+            return
+        }
+        do {
+            let clock = ContinuousClock()
+            let start = clock.now
+            let text = try await transcribeEngine.transcribe(samples: samples, initialPrompt: nil)
+            let elapsed = clock.now - start
+            let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+            logger.info("[stt] 전사 완료 — \(text.count, privacy: .public)자, \(String(format: "%.2f", seconds), privacy: .public)s")
+            #if DEBUG
+            dumpTranscriptForVerification(text)
+            #endif
+        } catch {
+            logger.error("[stt] 전사 실패: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -143,6 +194,13 @@ extension IpCodingApp: HotkeyManagerDelegate {
         } catch {
             logger.error("[debug] wav 덤프 실패: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// 태스크 1.5 검증용 전사 결과 덤프. wav 덤프와 동일 정책(DEBUG 한정·고정 파일명·내용 미로깅).
+    /// 1.7(주입)·1.9(HUD)가 정식 출력 경로가 되면 제거 — PLAN 1.8 완료 기준.
+    private func dumpTranscriptForVerification(_ text: String) {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("ipcoding-transcript.txt")
+        try? text.write(to: url, atomically: true, encoding: .utf8)
     }
     #endif
 }

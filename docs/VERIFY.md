@@ -40,5 +40,21 @@
 - [x] wav에 실제 음성 존재 (피크 9.5%·RMS 318·유의미 샘플 31%, 무음 아님) + 재생 시 발화 내용 일치 (2026-07-09 확인)
 - 검증 후: 덤프 wav는 임시 파일이라 재부팅/temp 정리 시 삭제됨. 수동 삭제 원하면 위 경로 rm.
 
+## [1.4] ModelManager — 모델 경로 해석 (Phase 1 최소)
+
+- [x] `~/Library/Application Support/IpCoding/models/`에서 whisper 모델 인식 (2026-07-09, 로그 "배치됨")
+- 개발용 배치: `ipcoding-bench/models/`의 모델을 위 경로에 심볼릭 링크 (547MB 중복 회피). 프로덕션 다운로드는 태스크 3.2.
+
+## [1.5] TranscribeEngine — whisper.cpp 통합, 전사
+
+통합: xcframework 사전 빌드(build-xcframework.sh, macOS arm64, GGML_METAL_EMBED_LIBRARY=ON) → IpCoding/Vendor/whisper.xcframework(gitignore, 재생성 가능) → pbxproj 링크 + Embed&Sign(dynamic framework). 모듈명 `whisper`, `import whisper`.
+재빌드 절차: scratchpad에서 whisper.cpp 클론 → macOS 슬라이스 빌드 → Vendor/로 복사(dSYMs 포함 — Info.plist가 DebugSymbolsPath 참조).
+
+- [x] 앱 시작 시 whisper 컨텍스트 로드 + 0.5초 무음 워밍업 (2026-07-09, 로그 확인)
+- [x] ⌘+Fn 발화 → 실제 전사 성공 (2026-07-09: "이 컴포넌트 유즈 스테이트 바이오 유즈 리디세로 리팩토링 해줘")
+- [x] 성능: 5.82s 발화 → 0.55s 전사 (RTF ≈ 0.09, Metal 가속) — Phase 1 지연 목표 충족
+- [x] 기술용어 오인식은 예상대로 (사전·initial_prompt 미적용 상태) → 태스크 1.6에서 교정
+- 검증 덤프: `$(getconf DARWIN_USER_TEMP_DIR)ipcoding-transcript.txt` (DEBUG 전용, 1.8에서 제거).
+
 ## 회귀 주의 — 마이크 무음 3증상
 다이얼로그 안 뜸 + 시스템 설정 마이크 목록 부재 + 캡처 전부 0값 → 원인은 **audio-input 엔타이틀먼트 누락**(Hardened Runtime 하 TCC 즉시 거부). `AVCaptureDevice.requestAccess` 명시 호출은 부차. 서명에 엔타이틀먼트 없으면 tccutil reset·requestAccess 다 무효.

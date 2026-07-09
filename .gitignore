@@ -2,6 +2,9 @@
 *.bin
 *.gguf
 
+# whisper.xcframework — build-xcframework.sh로 재생성 가능한 빌드 산출물 (수 MB)
+IpCoding/Vendor/
+
 # macOS
 .DS_Store
 

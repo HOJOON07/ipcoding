@@ -101,7 +101,7 @@ IpCoding/
 
 - 모델: `ggml-large-v3-turbo-q5_0.bin` (Phase 0에서 확정). 앱 시작 시 `whisper_init_from_file`로 로드 후 상주.
 - 파라미터: `language="ko"`, `translate=false`, `no_timestamps=true`, greedy 디코딩(속도 우선, Phase 0에서 beam=5와 비교), `initial_prompt` = PromptBuilder가 사전 용어로 생성(예: "useState, useEffect, async, await, git push, 리팩토링, cmux, ...").
-- 실행: 전용 백그라운드 큐. 결과/에러는 MainActor로 전달.
+- 실행: TranscribeEngine actor 격리로 whisper_context 접근을 직렬화하고 MainActor 밖에서 추론한다. 결과/에러(String)만 MainActor로 전달. (불변식은 "컨텍스트 접근 직렬화 + 추론 non-MainActor"이며 actor가 컴파일러 수준에서 강제. 근거: 공식 예제 LibWhisper.swift. 주의: 동기 추론은 협력 스레드를 점유하므로, STT·LLM이 동시 상주하는 시점(2.2)에 custom executor 오프로드를 재검토.)
 - 워밍업: 로드 직후 0.5초 무음으로 1회 더미 추론(첫 발화 지연 제거).
 
 ### 3.4 RefineEngine (llama.cpp)

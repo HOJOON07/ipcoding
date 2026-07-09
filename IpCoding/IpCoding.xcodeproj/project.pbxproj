@@ -6,8 +6,28 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AA0000000000000000000011 /* Vendor/whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000010 /* Vendor/whisper.xcframework */; };
+		AA0000000000000000000012 /* Vendor/whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000010 /* Vendor/whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		AA0000000000000000000013 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				AA0000000000000000000012 /* Vendor/whisper.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		AA0000000000000000000005 /* IpCoding.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IpCoding.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000000010 /* Vendor/whisper.xcframework */ = {isa = PBXFileReference; explicitFileType = wrapper.xcframework; path = Vendor/whisper.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +43,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA0000000000000000000011 /* Vendor/whisper.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -33,6 +54,7 @@
 			isa = PBXGroup;
 			children = (
 				AA0000000000000000000001 /* Sources */,
+				AA0000000000000000000014 /* Frameworks */,
 				AA0000000000000000000004 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -45,6 +67,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000014 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000000010 /* Vendor/whisper.xcframework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -55,6 +85,7 @@
 				AA0000000000000000000008 /* Sources */,
 				AA0000000000000000000002 /* Frameworks */,
 				AA0000000000000000000009 /* Resources */,
+				AA0000000000000000000013 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
