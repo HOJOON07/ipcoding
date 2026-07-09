@@ -202,6 +202,8 @@ protocol Injecting { func inject(_ text: String) async throws }
 
 로깅: os.Logger, 개인 텍스트는 privacy 마스킹. 원문/결과 텍스트는 히스토리 기능(v1.x) 전까지 디스크 저장하지 않는다.
 
+음성 데이터: 캡처 버퍼는 메모리에만 유지하고 디스크에 기록하지 않으며, 세션 종료 시 폐기한다(AudioCapture.drain 후 비움). 개발 검증용 DEBUG 덤프는 예외로 하되, 해당 태스크 완료 시 제거한다(PLAN 완료 기준에 명시).
+
 ## 6. 성능 목표 재확인 (측정 지점)
 
 - T0 = hotkeyUp 시각 기준: T_raw(원문 HUD 표시) ≤ 1.2s, T_first_token ≤ 2.0s, T_ready ≤ 3.5s, T_inject = T_ready + N.

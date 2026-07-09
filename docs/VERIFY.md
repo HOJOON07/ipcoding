@@ -28,3 +28,17 @@
 - [x] 200ms 미만 스침 → CANCELLED 로그 (2026-07-09, 96ms/92ms 2회 확인)
 - [x] ⌘ 단독·Fn 단독 입력 시 무반응 (2026-07-09 확인)
 - [ ] (자동화 불가·기회 시 확인) 탭 타임아웃 재활성화 — 로그에 "이벤트 탭 비활성화 감지 — 재활성화"가 뜨는 경우 정상 복구되는지
+
+## [1.3] AudioCapture — 마이크 캡처, 16kHz mono 변환
+
+전제: Hardened Runtime + `com.apple.security.device.audio-input` 엔타이틀먼트 (없으면 다이얼로그 없이 무음). 서명 반영 확인: `codesign -d --entitlements - <app>` → audio-input 키.
+검증 스크립트: `python3`로 wav 피크/RMS/유의미 샘플 분석, `afplay`로 재생.
+디버그 덤프 경로: `$(getconf DARWIN_USER_TEMP_DIR)ipcoding-capture.wav` (DEBUG 전용, 고정 파일명 덮어쓰기, 1.8에서 제거).
+
+- [x] 앱 시작 시 마이크 권한 다이얼로그 → 허용 후 시스템 설정 > 마이크 목록에 IpCoding 등록 (2026-07-09 확인)
+- [x] ⌘+Fn 홀드 발화 → wav 덤프, 포맷 16kHz mono Int16 (2026-07-09 확인)
+- [x] wav에 실제 음성 존재 (피크 9.5%·RMS 318·유의미 샘플 31%, 무음 아님) + 재생 시 발화 내용 일치 (2026-07-09 확인)
+- 검증 후: 덤프 wav는 임시 파일이라 재부팅/temp 정리 시 삭제됨. 수동 삭제 원하면 위 경로 rm.
+
+## 회귀 주의 — 마이크 무음 3증상
+다이얼로그 안 뜸 + 시스템 설정 마이크 목록 부재 + 캡처 전부 0값 → 원인은 **audio-input 엔타이틀먼트 누락**(Hardened Runtime 하 TCC 즉시 거부). `AVCaptureDevice.requestAccess` 명시 호출은 부차. 서명에 엔타이틀먼트 없으면 tccutil reset·requestAccess 다 무효.

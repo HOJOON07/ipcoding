@@ -36,8 +36,9 @@ final class HotkeyManager {
     /// 디바운스 문턱 (TDD §3.1: down 후 200ms 미만의 up은 취소).
     private let debounceThreshold: TimeInterval = 0.2
 
-    private var tap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
+    // MainActor 메서드에서만 쓰지만, deinit(비격리)의 최후 방어선 접근을 위해 unsafe 표기.
+    private nonisolated(unsafe) var tap: CFMachPort?
+    private nonisolated(unsafe) var runLoopSource: CFRunLoopSource?
     private var comboActive = false
     private var comboDownAt: ContinuousClock.Instant?
     private let clock = ContinuousClock()
@@ -106,14 +107,11 @@ final class HotkeyManager {
         }
     }
 
-    /// kAXTrustedCheckOptionPrompt 전역이 concurrency-safe하지 않아 1회 읽어 격리 래핑.
-    /// CFString 상수는 불변이라 실질 안전.
-    private nonisolated(unsafe) static let axPromptKey =
-        kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-
     /// 권한 다이얼로그 유도 (개발·온보딩용). 이미 신뢰된 경우 true.
     static func promptForAccessibilityIfNeeded() -> Bool {
-        let options = [axPromptKey: true] as CFDictionary
+        // kAXTrustedCheckOptionPrompt(C 전역)는 어떤 접근 방식도 strict concurrency에 걸린다.
+        // raw 값은 AXUIElement.h에 문서화된 안정 상수라 리터럴 사용 (값 변경 이력 없음).
+        let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
     }
 
