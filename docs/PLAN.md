@@ -43,7 +43,7 @@
 | 1.5 | TranscribeEngine: whisper.cpp SwiftPM 통합, 로드·워밍업·전사 | 1.4 | Phase 0 확정 파라미터 |
 | 1.6 | UserDictionary: json 로드 + 치환 적용 (UI 없이 파일 직접 편집) | — | Phase 0 시드 사전 사용 |
 | 1.7 | PasteboardInjector: 백업→set→⌘V→복원 | 1.1 | TDD §3.7 순서 엄수 |
-| 1.8 | SessionCoordinator: idle→recording→transcribing→injecting 축소판 상태 머신 | 1.2–1.7 | refining 상태는 Phase 2 |
+| 1.8 | SessionCoordinator: idle→recording→transcribing→injecting 축소판 상태 머신 | 1.2–1.7 | refining 상태는 Phase 2. hotkeyCancelled(디바운스 취소) 전이 포함 (TDD §2) |
 | 1.9 | 최소 HUD: recording 파형 + processing 스피너 | 1.8 | non-activating 검증 필수 |
 | 1.10 | 수동 테스트 매트릭스 1차 (터미널 4종 × 문장 3종) | 1.8 | TDD §7 |
 

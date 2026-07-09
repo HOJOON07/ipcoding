@@ -13,6 +13,10 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA0000000000000000000001 /* Sources */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
 			path = Sources;
 			sourceTree = "<group>";
 		};

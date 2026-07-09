@@ -59,6 +59,7 @@ IpCoding/
 이벤트와 전이:
   idle          --hotkeyDown-->        recording      (AudioCapture.start, HUD.show(.recording))
   recording     --hotkeyUp-->          transcribing   (AudioCapture.stop → buffer, HUD.show(.processing))
+  recording     --hotkeyCancelled-->   idle           (녹음 중단, 버퍼 폐기, HUD 즉시 소멸 — 디바운스 오조작, 에러 표시 없음)
   recording     --maxDuration(60s)-->  transcribing   (강제 마감)
   transcribing  --sttDone(raw)-->      refining       (사전 치환 적용 → HUD.show(.raw(text)), RefineEngine.start)
   transcribing  --sttFailed-->         idle           (HUD.show(.error) 1.5s 후 소멸)
@@ -82,7 +83,7 @@ IpCoding/
 
 - `CGEvent.tapCreate`로 `flagsChanged` 이벤트 탭 생성 (listen-only 아님 — HUD 표시 중 Tab/Esc 소비를 위해 `.defaultTap`).
 - ⌘+Fn 감지: `flags.contains(.maskCommand) && flags.contains(.maskSecondaryFn)` 가 **false→true** 전이 시 `hotkeyDown`, 둘 중 하나라도 빠지면 `hotkeyUp`.
-- 디바운스: down 후 200ms 미만의 up은 세션 취소로 처리 (실수 방지). 
+- 디바운스: down 후 200ms 미만의 up은 hotkeyUp 대신 `hotkeyCancelled` 이벤트로 발행한다 (실수 방지). 취소 전이 자체는 코디네이터가 수행한다(§2).
 - HUD 표시 중(awaitingInjection)에는 `keyDown` 이벤트도 검사: keyCode 48(Tab), 53(Esc)을 가로채고 **nil 반환으로 소비**(대상 앱에 전달 금지). 그 외 키는 통과.
 - 권한: 이벤트 탭은 손쉬운 사용(Accessibility) 또는 입력 모니터링 권한 필요. 탭 생성 실패 시 온보딩으로 유도.
 - 주의: 이벤트 탭은 타임아웃으로 비활성화될 수 있음(`kCGEventTapDisabledByTimeout`) — 콜백에서 감지해 즉시 재활성화.
