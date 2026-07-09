@@ -154,6 +154,7 @@ IpCoding/
 - 스키마: `[{"spoken": "유즈 스테이트", "written": "useState"}, ...]` (dictionary.json).
 - 두 곳에 적용: ① 전사 직후 원문에 문자열 치환(긴 spoken 우선 정렬로 부분 매칭 오염 방지) ② Whisper initial_prompt에 주입. LLM 프롬프트 주입은 하지 않는다 (Phase 0 실험 B에서 제거 — ①로 치환이 끝난 입력에 사전을 다시 주입하면 정보 이득 없이 역적용 사고(재시도→"제시도" 류)만 유발함이 검증됨. `ipcoding-bench/REPORT.md` §4.3).
 - CRUD는 설정 UI에서. 변경 즉시 파일 저장 + 메모리 반영.
+- 자동 제안(v1.x, PRD §5.2)의 진입점: LLM 교정 쌍 빈도 집계 → 제안 큐 → 사용자 승인 시 CRUD 경로로 반영. 제안 규칙은 기존 항목과의 부분 매칭 오염을 사전 검증(긴 spoken 우선 정렬 규칙 재사용)한다. 상세는 PRD 확정(§10-7) 후 Phase 4 착수 시점에 명세.
 
 ### 3.7 Injector
 
