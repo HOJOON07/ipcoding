@@ -19,6 +19,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
     private let audioCapture = AudioCapture()
     private let modelManager = ModelManager()
     private let transcribeEngine = TranscribeEngine()
+    private lazy var userDictionary = UserDictionary(directory: modelManager.modelsDirectory.deletingLastPathComponent())
     private let logger = Logger(subsystem: "com.hojoon.ipcoding", category: "app")
     /// 임시 배선의 Task 홉 순서 보장용 — down/up이 각각 세대를 올려, 늦게 실행된
     /// start가 이미 끝난 세션을 되살리지 못하게 한다 (1.8에서 코디네이터 직렬 소비로 대체).
@@ -56,6 +57,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         } catch {
             logger.error("모델 디렉토리 생성 실패: \(String(describing: error), privacy: .public)")
         }
+        userDictionary.load()
         let turbo = ModelManager.whisperTurbo
         guard modelManager.isInstalled(turbo) else {
             logger.warning("STT 모델 \(turbo.filename, privacy: .public) 없음 — 수동 배치 필요")
@@ -135,10 +137,16 @@ extension IpCodingApp: HotkeyManagerDelegate {
         do {
             let clock = ContinuousClock()
             let start = clock.now
-            let text = try await transcribeEngine.transcribe(samples: samples, initialPrompt: nil)
+            // initial_prompt에 사전 용어 주입 (TDD §3.6 ②) → whisper가 표준 표기로 유도.
+            let rawText = try await transcribeEngine.transcribe(
+                samples: samples,
+                initialPrompt: userDictionary.initialPromptTerms()
+            )
+            // 전사 직후 사전 치환 (TDD §3.6 ①).
+            let text = userDictionary.apply(to: rawText)
             let elapsed = clock.now - start
             let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
-            logger.info("[stt] 전사 완료 — \(text.count, privacy: .public)자, \(String(format: "%.2f", seconds), privacy: .public)s")
+            logger.info("[stt] 전사+치환 완료 — \(text.count, privacy: .public)자, \(String(format: "%.2f", seconds), privacy: .public)s")
             #if DEBUG
             dumpTranscriptForVerification(text)
             #endif

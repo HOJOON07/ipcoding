@@ -56,5 +56,16 @@
 - [x] 기술용어 오인식은 예상대로 (사전·initial_prompt 미적용 상태) → 태스크 1.6에서 교정
 - 검증 덤프: `$(getconf DARWIN_USER_TEMP_DIR)ipcoding-transcript.txt` (DEBUG 전용, 1.8에서 제거).
 
+## [1.6] UserDictionary — 시드 사전 치환 + initial_prompt
+
+배치: `ipcoding-bench/dictionary_seed.json`을 `~/Library/Application Support/IpCoding/dictionary.json`으로 복사 (심링크 아닌 복사 — 편집이 벤치 원본 오염 방지). Phase 1은 파일 직접 편집(UI는 2.8).
+
+- [x] 앱 시작 시 사전 로드 (2026-07-10, 로그 "17개 항목")
+- [x] initial_prompt 효과 실측 — 같은 발화 비교:
+  - 1.5 (힌트 없음): "유즈 스테이트 바이오 유즈 리디세로"
+  - 1.6 (힌트+사전): "useState 말고 useReducer로" — 기술용어 3개 정확 전사
+- [x] 성능 유지: 7.15s 발화 → 0.65s (initial_prompt 추가에도 지연 미미)
+- 잔존 오인식(예: "컴포먼트")은 사전 확장 또는 LLM 교정(Phase 2) 몫 — 3겹 방어 설계대로.
+
 ## 회귀 주의 — 마이크 무음 3증상
 다이얼로그 안 뜸 + 시스템 설정 마이크 목록 부재 + 캡처 전부 0값 → 원인은 **audio-input 엔타이틀먼트 누락**(Hardened Runtime 하 TCC 즉시 거부). `AVCaptureDevice.requestAccess` 명시 호출은 부차. 서명에 엔타이틀먼트 없으면 tccutil reset·requestAccess 다 무효.
