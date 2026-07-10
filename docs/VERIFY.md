@@ -78,5 +78,14 @@
 - [x] 성능: 발화 → 전사 0.55s → 주입 완료 매끄러움
 - 참고: whisper 원문 주입 단계(오인식 교정은 사전 확장·Phase 2 LLM 몫). bracketed paste로 즉시 실행 안 됨(터미널 안전).
 
+## [1.8] SessionCoordinator — 상태 머신 (축소판)
+
+전이 (TDD §2 Phase 1): idle→recording→transcribing→injecting→idle + hotkeyCancelled/sttFailed→idle, maxDuration 강제 마감.
+- [x] 정상 세션: 캡처→전사+치환→주입→idle 복귀 (2026-07-10, cmux 주입 확인)
+- [x] 빈 입력 단락: 짧은 눌림 → 캡처 0 샘플 → 전사·주입 없이 idle (2026-07-10 로그 확인)
+- [x] 연속 세션: 매 세션 깨끗이 idle 복귀 후 재시작 (레이스 없음)
+- [x] 임시 배선·DEBUG 덤프 완전 제거 (PLAN 1.8 완료 기준), IpCodingApp은 이벤트 얇은 전달만
+- WARN 1 해소: 엔진 start를 탭 콜백에서 Task로 미룸(콜백 블로킹 방지) + 세대 토큰으로 pending start 무효화(레이스 차단). BT 스톨 off-main은 실측 후 과제(TDD §3.2).
+
 ## 회귀 주의 — 마이크 무음 3증상
 다이얼로그 안 뜸 + 시스템 설정 마이크 목록 부재 + 캡처 전부 0값 → 원인은 **audio-input 엔타이틀먼트 누락**(Hardened Runtime 하 TCC 즉시 거부). `AVCaptureDevice.requestAccess` 명시 호출은 부차. 서명에 엔타이틀먼트 없으면 tccutil reset·requestAccess 다 무효.

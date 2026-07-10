@@ -96,6 +96,7 @@ IpCoding/
 - 장치: 기본은 시스템 기본 입력. 설정에서 고정 장치 선택 시 `kAudioOutputUnitProperty_CurrentDevice`로 지정.
 - 상한: 60초에서 강제 마감(메모리·지연 폭주 방지). 무음 입력이어도 정상 흐름 유지(빈 전사 → sttFailed 처리).
 - 엔진은 세션마다 start/stop (상시 가동 금지 — 마이크 표시등·HFP 전환은 발화 중에만).
+- 코디네이터는 엔진 start를 이벤트 탭 콜백에서 동기 실행하지 않고 Task로 미룬다(콜백 블로킹→탭 타임아웃 방지, HotkeyManager 계약). start는 동기 블로킹이며 BT HFP 전환 시 메인을 수백 ms 막을 수 있음 — 내장 마이크는 예산 내라 현재는 미룸만으로 충분. BT 스톨을 없애려면 start를 off-main executor로 분리해야 하며, 실측(타깃 하드웨어 BT start 지연) 후 필요 시 도입한다.
 
 ### 3.3 TranscribeEngine (whisper.cpp)
 
