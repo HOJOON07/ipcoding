@@ -67,5 +67,16 @@
 - [x] 성능 유지: 7.15s 발화 → 0.65s (initial_prompt 추가에도 지연 미미)
 - 잔존 오인식(예: "컴포먼트")은 사전 확장 또는 LLM 교정(Phase 2) 몫 — 3겹 방어 설계대로.
 
+## [1.7] PasteboardInjector — 클립보드 경유 주입
+
+순서 (TDD §3.7): 백업(아이템 단위) → set → ⌘V post → 250ms 후 복원(changeCount 불일치 시 포기).
+전제: 손쉬운 사용 권한(CGEvent post). HUD non-activating(1.9 전까지 HUD 없음).
+
+- [x] 전사문이 활성 앱에 주입됨 — cmux·Chrome·카카오톡 등 다중 앱 (2026-07-10)
+- [x] 한글+영어 혼용 무결 — 48자 긴 문장 깨짐 없이 주입 (Phase 1 완료 기준)
+- [x] 클립보드 복원 — 주입 후 원래 복사 내용 유지 (사용자 확인)
+- [x] 성능: 발화 → 전사 0.55s → 주입 완료 매끄러움
+- 참고: whisper 원문 주입 단계(오인식 교정은 사전 확장·Phase 2 LLM 몫). bracketed paste로 즉시 실행 안 됨(터미널 안전).
+
 ## 회귀 주의 — 마이크 무음 3증상
 다이얼로그 안 뜸 + 시스템 설정 마이크 목록 부재 + 캡처 전부 0값 → 원인은 **audio-input 엔타이틀먼트 누락**(Hardened Runtime 하 TCC 즉시 거부). `AVCaptureDevice.requestAccess` 명시 호출은 부차. 서명에 엔타이틀먼트 없으면 tccutil reset·requestAccess 다 무효.

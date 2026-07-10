@@ -20,6 +20,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
     private let modelManager = ModelManager()
     private let transcribeEngine = TranscribeEngine()
     private lazy var userDictionary = UserDictionary(directory: modelManager.modelsDirectory.deletingLastPathComponent())
+    private let injector: any Injecting = PasteboardInjector()
     private let logger = Logger(subsystem: "com.hojoon.ipcoding", category: "app")
     /// 임시 배선의 Task 홉 순서 보장용 — down/up이 각각 세대를 올려, 늦게 실행된
     /// start가 이미 끝난 세션을 되살리지 못하게 한다 (1.8에서 코디네이터 직렬 소비로 대체).
@@ -117,18 +118,19 @@ extension IpCodingApp: HotkeyManagerDelegate {
     func hotkeyUp(heldFor duration: TimeInterval) {
         logger.info("[hotkey] UP — \(String(format: "%.2f", duration), privacy: .public)s 홀드")
         sessionGeneration += 1
+        let generation = sessionGeneration
         Task { @MainActor in
             let samples = self.audioCapture.stop()
             #if DEBUG
             self.dumpCaptureForVerification(samples)
             #endif
-            await self.transcribeAndReport(samples)
+            await self.transcribeAndReport(samples, generation: generation)
         }
     }
 
     /// 태스크 1.5 검증용 임시 배선: 캡처 → 전사 → 로그. HUD 표시(1.9)·주입(1.7) 전 단계.
     /// 전사 텍스트는 개인 데이터라, 결과는 길이만 로깅한다. 내용 확인은 DEBUG 파일 덤프로 한정.
-    private func transcribeAndReport(_ samples: [Float]) async {
+    private func transcribeAndReport(_ samples: [Float], generation: Int) async {
         guard !samples.isEmpty else { return }
         guard await transcribeEngine.isLoaded else {
             logger.warning("[stt] 엔진 미준비 — 전사 생략")
@@ -150,6 +152,19 @@ extension IpCodingApp: HotkeyManagerDelegate {
             #if DEBUG
             dumpTranscriptForVerification(text)
             #endif
+            // 태스크 1.7: 전사문을 활성 앱에 주입 (Phase 1은 원문 주입 — LLM 교정은 Phase 2).
+            // 임시 배선의 재입력 가드 — 전사 중 새 세션(hotkeyDown/Up)이 시작돼 세대가 바뀌었으면
+            // 주입 취소 (겹친 주입이 서로의 클립보드를 백업/복원하는 레이스 방지). 정식 직렬화는 1.8.
+            guard generation == sessionGeneration else {
+                logger.info("[inject] 새 세션 시작됨 — 주입 취소")
+                return
+            }
+            do {
+                try await injector.inject(text)
+                logger.info("[inject] 주입 완료")
+            } catch {
+                logger.error("[inject] 주입 실패: \(String(describing: error), privacy: .public)")
+            }
         } catch {
             logger.error("[stt] 전사 실패: \(String(describing: error), privacy: .public)")
         }
