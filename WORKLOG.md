@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-07-10 — Phase 2 착수: 2.1 LlamaBridge 스파이크
+
+### 무엇을 했나
+Qwen3.5-9B(q4)를 llama.cpp로 통합하기 전, CLI로 로드·품질·속도·씽킹 처리를 검증. Phase 2 최대 리스크(Qwen3.5 mmproj)를 해소하고 통합 경로를 확정.
+
+### 발견 (리스크 지형 반전)
+- **mmproj는 blocker 아님** — Qwen3.5는 텍스트/비전 gguf가 별도 배포. 텍스트 gguf만 받으면 mmproj 없이 순수 텍스트 로드·생성. 차순위 모델 전환 불필요 (PRD §10-4 리스크 해소).
+- **Ollama 블롭은 mainline llama.cpp와 비호환** — `qwen35.rope.dimension_sections` 스키마 불일치(Ollama 포크 3 vs mainline 4)로 로드 실패. → unsloth/Qwen3.5-9B-GGUF Q4_K_M(5.3GB, Phase 0과 동일 양자화)을 `~/Library/Application Support/IpCoding/models/`에 다운로드해 사용. mainline llama.cpp(brew b9910)에서 로드 성공.
+- **진짜 리스크는 ggml 심볼 충돌** — whisper.cpp·llama.cpp를 각자 ggml 정적 포함 xcframework로 함께 링크하면 중복 심볼 수백 개(다수 이슈 실재). 2.2 통합 시 "동일 ggml 공유 빌드" 방식 필요.
+
+### 스파이크 결과 (bench-analyst)
+- **씽킹 모드 끄기 확정**: assistant 프리픽스에 빈 `<think>\n\n</think>` 시드 → 즉시 답 생성 (RefineEngine의 ChatML 수동 조립에 적합, jinja 불필요). 방어용 `</think>` 파싱 제거 유지.
+- **품질**: 전사문 5개 의도 보존 5/5, 무번역, 오인식 교정 작동. **Ollama 9b+v2 레퍼런스보다 깨끗** (구분자 에코 없음, s21 "커밋해줘" 무번역 유지).
+- **속도**: TTFT ~1.3s (Ollama 1.58s보다 약간 빠름), 생성 ~37 tok/s, temp 0.2 안정.
+- **프롬프트 캐시 발견(성능 지렛대)**: v2 프롬프트 ~530토큰이 TTFT의 92%인데 매번 동일한 고정 프리픽스. 프롬프트 캐시로 프리필 1326ms→0ms, 총 1506ms→211ms. 고정 프리픽스 KV를 로드 시 1회 디코드·상주시키고 raw_text 델타(5~30토큰)만 처리 → Phase 0가 걱정한 L2 지연 예산 여유 확보.
+
+### 다음
+- TDD §3.4에 스파이크 발견 반영 (프롬프트 캐시, 씽킹 시드, 정지 토큰) — spec-guardian 판정 후 승인
+- 2.2 RefineEngine 구현 (actor 격리 whisper 패턴 재사용) + ggml 공유 xcframework 통합
+
+---
+
 ## 2026-07-07 ~ 07-08 — Phase 0 착수: 환경 구축 · 벤치 하네스 · 실험 A
 
 ### 1. 무엇을 했나

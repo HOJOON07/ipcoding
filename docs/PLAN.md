@@ -57,8 +57,8 @@
 
 | # | 태스크 | 의존 | 비고 |
 |---|---|---|---|
-| 2.1 | LlamaBridge 스파이크: 확정 모델 gguf 로드 + 스트리밍 생성 CLI 검증 | — | Qwen3.5 mmproj 이슈 여기서 확인 |
-| 2.2 | RefineEngine: 로드 상주, 샘플링 파라미터, 토큰 콜백, 타임아웃, 취소 | 2.1 | TDD §3.4 |
+| 2.1 | LlamaBridge 스파이크: 확정 모델 gguf 로드 + 스트리밍 생성 CLI 검증 | — | ✅ 완료. mmproj는 blocker 아님(텍스트 gguf 별도). gguf=unsloth/Qwen3.5-9B-GGUF Q4_K_M (Ollama 블롭은 mainline llama.cpp와 rope 스키마 비호환이라 배제). 리스크: whisper+llama 각자 ggml 정적 포함 xcframework 링크 시 중복 심볼 — 공유 ggml 단일 링크를 2.2에서 확정 |
+| 2.2 | RefineEngine: 로드 상주, 샘플링 파라미터, 토큰 콜백, 타임아웃, 취소, 프롬프트 캐시 | 2.1 | TDD §3.4. **통합 방식 확정: whisper·llama가 ggml을 공유하는 단일 링크(중복 심볼 회피)**. actor 격리(whisper 패턴 재사용) |
 | 2.3 | PromptBuilder: 시스템 프롬프트 v2 조립 + initial_prompt용 사전 용어 생성. LLM 프롬프트에 사전 미주입({dictionary_pairs}="(없음)" 고정, TDD §3.6) | 1.6 | Phase 0 산출물 |
 | 2.4 | 상태 머신 확장: refining / awaitingInjection, 폴백 경로 | 2.2 | TDD §2 전이표 전수 구현. sttFailed→idle 시 error HUD "인식하지 못했어요" 1.5s 표시 후 소멸 (TDD §2·§5). Phase 1의 무표시 idle을 대체 |
 | 2.5 | HUD 확장: raw 표시 → 스트리밍 렌더 → ready + 힌트 바 → error(1.5s) | 2.4 | 4줄 제한, 화면 위치 |
