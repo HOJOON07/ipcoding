@@ -27,6 +27,31 @@ Qwen3.5-9B(q4)를 llama.cpp로 통합하기 전, CLI로 로드·품질·속도·
 
 ---
 
+## 2026-07-10 — 2.2 RefineEngine + 공유 ggml 결합 프레임워크
+
+### 무엇을 했나
+llama.cpp를 앱에 통합하고 RefineEngine을 구현. 2.2 최대 난관(ggml 심볼 충돌)과 llama C interop을 모두 뚫음.
+
+### 결합 프레임워크 (ggml 공유)
+- whisper.cpp+llama.cpp를 각자 ggml 정적 포함하면 중복 심볼로 링크 실패. whisper.cpp CMake의 `if (NOT TARGET ggml)` 가드를 이용해 상위 CMake에서 llama.cpp 먼저 로드 → ggml 타겟 공유 → 결합 `IpCodingEngine.xcframework`. 중복 심볼 0 (ggml_init 등 각 1개).
+- 재현 레시피: `scripts/build-engine.sh` (Vendor/는 gitignore). 헤더 수정 2건 포함(ggml-opt.h 추가, C++ 래퍼 llama-cpp.h 모듈맵 제외).
+- 기존 whisper.xcframework 교체, TranscribeEngine `import whisper`→`import IpCodingEngine`, whisper 회귀 없음.
+
+### RefineEngine (TDD §3.4)
+- actor 격리(whisper 패턴), 2-시퀀스 프롬프트 캐시(seq 0 프리픽스 상주 → 매 세션 seq 1 복사), 씽킹 시드, UTF-8 스트리밍, 취소 훅, TDD 샘플링 파라미터, 출력 정제.
+- 실기기: 교정 정확(2.1 품질 재현), 캐시 경로 **0.24s**(첫 0.69s).
+
+### 디버깅 3건 (실증으로 해결)
+- 한글 UTF-8 깨짐 → 바이트 누적 방출.
+- 두 번째 호출이 첫 결과 반복 → **n_seq_max=2 누락**(seq 1 못 씀)이 근본. seq_rm 부분 제거도 실패(removed=false) → 2-시퀀스 복사로 우회.
+- batch_get_one 자동 위치 → 명시적 pos batch.
+
+### 다음 (새 세션)
+- 2.3 PromptBuilder (refine_v2 로드+사전 주입, 현재 앱 임시 로드 대체)
+- 2.4 상태 머신 확장 (refining/awaitingInjection, transcribe→refine→inject 배선, 타임아웃 정책, error HUD)
+
+---
+
 ## 2026-07-07 ~ 07-08 — Phase 0 착수: 환경 구축 · 벤치 하네스 · 실험 A
 
 ### 1. 무엇을 했나

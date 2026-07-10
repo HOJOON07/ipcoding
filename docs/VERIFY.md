@@ -108,5 +108,23 @@
 
 **Phase 1 완료 기준 점검**: 한영 무결 ✅ / 클립보드 복원 ✅ / 터미널 4종 ✅ / T_inject 관측상 ≤1.5s(전사 ~0.5s+주입 ~0.25s, 여유 큼 — p90 정식 계측은 2.9) ✅ / 도그푸딩 시작 가능 ✅.
 
+## [2.2] RefineEngine — llama.cpp 통합, 프롬프트 캐시
+
+빌드: whisper.cpp+llama.cpp 공유 ggml 결합 `IpCodingEngine.xcframework` (재현: `scripts/build-engine.sh`). import IpCodingEngine 한 줄로 양쪽 C API.
+전제: `Qwen3.5-9B-Q4_K_M.gguf` (unsloth, mainline 호환) 배치.
+
+- [x] 결합 xcframework 중복 심볼 0 — whisper_full·llama_decode·ggml_init 각 1개 (nm 확인)
+- [x] whisper 전사 회귀 없음 (결합 프레임워크로 교체 후)
+- [x] llama 로드 + 2-시퀀스 프롬프트 캐시 준비 (프리픽스 518토큰, seq 0 상주)
+- [x] 교정 정확 — 실기기 자가 테스트 (제거됨): "useState 말고 useReducer" 문장 불변(의도 보존), "커밋해줘"→"커밋해줘"(규칙4 준수). 2.1 CLI 스파이크 품질 재현.
+- [x] 프롬프트 캐시 속도: 첫 호출 0.69s, 캐시 경로 **0.24s** (2.1 스파이크 211ms 재현)
+- [x] 한글 UTF-8 스트리밍 무결 (바이트 누적, 다토큰 글자 안 깨짐)
+
+### 디버깅 기록 (회귀 주의)
+- **n_seq_max 기본 1** → seq 1(캐시용) 디코드 실패. 컨텍스트에 `n_seq_max=2` 필수.
+- **seq_rm 부분 제거 실패**(removed=false) → 프리픽스만 남기는 방식 불가. 2-시퀀스 복사(seq 0→1)로 우회.
+- **batch_get_one 자동 위치 추적**은 seq 조작 후 어긋남 → 명시적 pos batch 사용.
+- llama.h가 ggml-opt.h 전이 include, C++ 래퍼 llama-cpp.h는 모듈맵 제외 (build-engine.sh 반영).
+
 ## 회귀 주의 — 마이크 무음 3증상
 다이얼로그 안 뜸 + 시스템 설정 마이크 목록 부재 + 캡처 전부 0값 → 원인은 **audio-input 엔타이틀먼트 누락**(Hardened Runtime 하 TCC 즉시 거부). `AVCaptureDevice.requestAccess` 명시 호출은 부차. 서명에 엔타이틀먼트 없으면 tccutil reset·requestAccess 다 무효.

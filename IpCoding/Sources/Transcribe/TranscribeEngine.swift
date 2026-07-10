@@ -1,5 +1,5 @@
 import Foundation
-import whisper
+import IpCodingEngine
 import os
 
 enum TranscribeError: Error {

@@ -18,6 +18,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
     private let audioCapture = AudioCapture()
     private let modelManager = ModelManager()
     private let transcribeEngine = TranscribeEngine()
+    private let refineEngine = RefineEngine()
     private lazy var userDictionary = UserDictionary(directory: modelManager.modelsDirectory.deletingLastPathComponent())
     private let injector: any Injecting = PasteboardInjector()
     private let hud = HUDController()
@@ -76,6 +77,33 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
                 logger.info("STT 엔진 준비 완료")
             } catch {
                 logger.error("STT 엔진 준비 실패: \(String(describing: error), privacy: .public)")
+            }
+        }
+
+        prepareRefineEngine()
+    }
+
+    /// 태스크 2.2: 교정 LLM 로드 + 프롬프트 프리픽스 캐시 준비. 파이프라인 배선은 2.4.
+    private func prepareRefineEngine() {
+        let qwen = ModelManager.qwenRefine
+        guard modelManager.isInstalled(qwen) else {
+            logger.warning("LLM 모델 \(qwen.filename, privacy: .public) 없음")
+            return
+        }
+        // 프롬프트 v2 (2.3 PromptBuilder 전 임시 로드). {dictionary_pairs}는 "(없음)" (TDD §3.6).
+        let promptURL = modelManager.modelsDirectory.deletingLastPathComponent()
+            .appendingPathComponent("refine_v2.txt")
+        Task {
+            do {
+                let modelPath = try modelManager.resolvedPath(for: qwen)
+                try await refineEngine.load(modelPath: modelPath.path)
+                let template = try String(contentsOf: promptURL, encoding: .utf8)
+                    .replacingOccurrences(of: "{dictionary_pairs}", with: "(없음)")
+                try await refineEngine.preparePrompt(template: template)
+                await refineEngine.warmUp()  // Metal 커널·생성 경로 예열 (첫 교정 지연 제거)
+                logger.info("교정 엔진 준비 완료")
+            } catch {
+                logger.error("교정 엔진 준비 실패: \(String(describing: error), privacy: .public)")
             }
         }
     }

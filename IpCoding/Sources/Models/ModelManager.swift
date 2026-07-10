@@ -33,6 +33,15 @@ final class ModelManager {
         kind: .stt
     )
 
+    /// Phase 0에서 확정한 교정 LLM (REPORT.md: Qwen3.5 9B + 프롬프트 v2).
+    /// gguf는 unsloth/Qwen3.5-9B-GGUF Q4_K_M (mainline llama.cpp 호환, 2.1 스파이크).
+    static let qwenRefine = ModelSpec(
+        id: "qwen3.5-9b-q4",
+        displayName: "Qwen3.5 9B (Q4_K_M)",
+        filename: "Qwen3.5-9B-Q4_K_M.gguf",
+        kind: .llm
+    )
+
     private let logger = Logger(subsystem: "com.hojoon.ipcoding", category: "models")
 
     /// `~/Library/Application Support/IpCoding/models/` (TDD §1, ggml-integration 스킬).
