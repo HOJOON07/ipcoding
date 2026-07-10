@@ -60,8 +60,8 @@
 | 2.1 | LlamaBridge 스파이크: 확정 모델 gguf 로드 + 스트리밍 생성 CLI 검증 | — | Qwen3.5 mmproj 이슈 여기서 확인 |
 | 2.2 | RefineEngine: 로드 상주, 샘플링 파라미터, 토큰 콜백, 타임아웃, 취소 | 2.1 | TDD §3.4 |
 | 2.3 | PromptBuilder: 시스템 프롬프트 v2 조립 + initial_prompt용 사전 용어 생성. LLM 프롬프트에 사전 미주입({dictionary_pairs}="(없음)" 고정, TDD §3.6) | 1.6 | Phase 0 산출물 |
-| 2.4 | 상태 머신 확장: refining / awaitingInjection, 폴백 경로 | 2.2 | TDD §2 전이표 전수 구현 |
-| 2.5 | HUD 확장: raw 표시 → 스트리밍 렌더 → ready + 힌트 바 | 2.4 | 4줄 제한, 화면 위치 |
+| 2.4 | 상태 머신 확장: refining / awaitingInjection, 폴백 경로 | 2.2 | TDD §2 전이표 전수 구현. sttFailed→idle 시 error HUD "인식하지 못했어요" 1.5s 표시 후 소멸 (TDD §2·§5). Phase 1의 무표시 idle을 대체 |
+| 2.5 | HUD 확장: raw 표시 → 스트리밍 렌더 → ready + 힌트 바 → error(1.5s) | 2.4 | 4줄 제한, 화면 위치 |
 | 2.6 | Tab/Esc 인터셉트 (HUD 표시 중에만 소비) | 1.2, 2.4 | 다른 앱 키 입력 오염 금지 검증 |
 | 2.7 | 자동 주입 타이머 N (기본 1.0s, 디버그 메뉴에서 조절) | 2.4 | 도그푸딩으로 N 확정 → PRD §10-3 해소 |
 | 2.8 | 사전 편집 UI (설정 창 내 테이블 CRUD) | 1.6 | |

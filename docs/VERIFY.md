@@ -87,5 +87,14 @@
 - [x] 임시 배선·DEBUG 덤프 완전 제거 (PLAN 1.8 완료 기준), IpCodingApp은 이벤트 얇은 전달만
 - WARN 1 해소: 엔진 start를 탭 콜백에서 Task로 미룸(콜백 블로킹 방지) + 세대 토큰으로 pending start 무효화(레이스 차단). BT 스톨 off-main은 실측 후 과제(TDD §3.2).
 
+## [1.9] HUD — 최소 상태 표시 (recording 레벨미터 / processing 스피너)
+
+핵심: NSPanel non-activating — key window가 되면 주입 대상이 사라짐(makeKey 금지, orderFrontRegardless).
+- [x] 녹음 중 하단 중앙에 HUD + 마이크 레벨 미터가 목소리에 반응 (2026-07-10)
+- [x] 손 뗀 후 "처리 중…" 스피너로 전환
+- [x] 처리 완료 후 HUD 자동 소멸
+- [x] **non-activating 무결 — HUD 표시 중에도 주입 대상이 앞 앱(cmux·Chrome)으로 정확히 잡힘** (로그 교차 확인, key window화 안 됨)
+- RMS 레벨: AudioCapture.currentLevel(lock 보호) → HUDViewModel 30fps 폴링(상승 즉시·하강 완만).
+
 ## 회귀 주의 — 마이크 무음 3증상
 다이얼로그 안 뜸 + 시스템 설정 마이크 목록 부재 + 캡처 전부 0값 → 원인은 **audio-input 엔타이틀먼트 누락**(Hardened Runtime 하 TCC 즉시 거부). `AVCaptureDevice.requestAccess` 명시 호출은 부차. 서명에 엔타이틀먼트 없으면 tccutil reset·requestAccess 다 무효.

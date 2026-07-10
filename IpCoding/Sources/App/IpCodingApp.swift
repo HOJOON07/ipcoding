@@ -20,11 +20,13 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
     private let transcribeEngine = TranscribeEngine()
     private lazy var userDictionary = UserDictionary(directory: modelManager.modelsDirectory.deletingLastPathComponent())
     private let injector: any Injecting = PasteboardInjector()
+    private let hud = HUDController()
     private lazy var coordinator = SessionCoordinator(
         audioCapture: audioCapture,
         transcribeEngine: transcribeEngine,
         userDictionary: userDictionary,
-        injector: injector
+        injector: injector,
+        hud: hud
     )
     private let logger = Logger(subsystem: "com.hojoon.ipcoding", category: "app")
 

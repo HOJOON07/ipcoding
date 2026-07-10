@@ -35,6 +35,10 @@ final class AudioCapture {
     private var configChangeObserver: (any NSObjectProtocol)?
     private let logger = Logger(subsystem: "com.hojoon.ipcoding", category: "audio")
 
+    /// 최근 마이크 입력 레벨 (0~1, RMS 정규화). HUD 레벨 미터가 폴링한다 (TDD §3.8).
+    /// 정지 상태면 0.
+    var currentLevel: Float { sink?.currentLevel ?? 0 }
+
     // MARK: - 마이크 권한 (macOS TCC: kTCCServiceMicrophone)
     // 전제: Hardened Runtime + com.apple.security.device.audio-input 엔타이틀먼트.
     // 엔타이틀먼트가 없으면 아래 요청은 다이얼로그 없이 즉시 거부된다.
@@ -143,6 +147,9 @@ final class AudioCapture {
 
 /// 오디오 스레드에서 도는 수집기. 내부 상태는 lock으로 보호 — 그래서 @unchecked Sendable.
 private final class CaptureSink: @unchecked Sendable {
+    /// 음성 RMS는 대개 0.1~0.3이라 레벨 미터가 가득 차 보이도록 부스트하는 배율.
+    private static let levelBoost: Float = 3
+
     private let converter: AVAudioConverter
     private let targetFormat: AVAudioFormat
     private let maxFrames: Int
@@ -152,6 +159,14 @@ private final class CaptureSink: @unchecked Sendable {
     private var samples: [Float] = []
     private var maxFired = false
     private var closed = false
+    private var lastLevel: Float = 0
+
+    /// 최근 청크의 RMS 레벨(0~1). 오디오 스레드가 쓰고 MainActor가 읽으므로 lock 보호.
+    var currentLevel: Float {
+        lock.lock()
+        defer { lock.unlock() }
+        return lastLevel
+    }
 
     init(
         converter: AVAudioConverter,
@@ -231,6 +246,14 @@ private final class CaptureSink: @unchecked Sendable {
     private func appendFramesLocked(from out: AVAudioPCMBuffer) -> Bool {
         guard out.frameLength > 0, let channelData = out.floatChannelData else { return false }
         let frames = UnsafeBufferPointer(start: channelData[0], count: Int(out.frameLength))
+
+        // 이 청크의 RMS를 레벨 미터용으로 갱신 (0~1). 음성 RMS는 대개 작아 부스트 후 클램프.
+        if !frames.isEmpty {
+            var sumSquares: Float = 0
+            for sample in frames { sumSquares += sample * sample }
+            let rms = (sumSquares / Float(frames.count)).squareRoot()
+            lastLevel = min(1, rms * Self.levelBoost)
+        }
 
         let room = maxFrames - samples.count
         guard room > 0 else { return false }

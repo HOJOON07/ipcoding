@@ -25,18 +25,23 @@ final class SessionCoordinator {
     private let transcribeEngine: TranscribeEngine
     private let userDictionary: UserDictionary
     private let injector: any Injecting
+    private let hud: HUDController
     private let logger = Logger(subsystem: "com.hojoon.ipcoding", category: "coordinator")
 
     init(
         audioCapture: AudioCapture,
         transcribeEngine: TranscribeEngine,
         userDictionary: UserDictionary,
-        injector: any Injecting
+        injector: any Injecting,
+        hud: HUDController
     ) {
         self.audioCapture = audioCapture
         self.transcribeEngine = transcribeEngine
         self.userDictionary = userDictionary
         self.injector = injector
+        self.hud = hud
+        // HUD 레벨 미터가 마이크 입력에 반응하도록 연결.
+        hud.viewModel.levelProvider = { [weak audioCapture] in audioCapture?.currentLevel ?? 0 }
     }
 
     // MARK: - 이벤트 (HotkeyManager·AudioCapture가 코디네이터로 전달)
@@ -95,8 +100,10 @@ final class SessionCoordinator {
     // MARK: - 전사 → 주입 (Phase 2에서 refining 삽입)
 
     private func runTranscribeAndInject(_ samples: [Float]) async {
-        // 빈 캡처(무음/취소 직후)·엔진 미준비 → idle 복귀. TDD §2의 sttFailed→idle과 최종 귀결
-        // 동일하되, 빈 배열은 whisper_full에 넘기면 baseAddress가 nil이라 전사 전에 단락한다.
+        // 빈 캡처(무음/취소 직후)·엔진 미준비 → idle 복귀. 빈 배열은 whisper_full에 넘기면
+        // baseAddress가 nil이라 전사 전에 단락한다.
+        // TDD §2/§5는 sttFailed 시 error HUD("인식하지 못했어요") 1.5s를 규정하나, Phase 1 축소판은
+        // 무표시 idle로 소멸한다(PLAN 1.8/1.9). error HUD는 Phase 2 배치(PLAN 2.4/2.5).
         guard !samples.isEmpty, await transcribeEngine.isLoaded else {
             logger.warning("[stt] 빈 입력 또는 엔진 미준비 — idle 복귀")
             transition(to: .idle)
@@ -112,6 +119,7 @@ final class SessionCoordinator {
             text = userDictionary.apply(to: raw)  // 사전 치환 (TDD §3.6 ①)
             logger.info("[stt] 전사+치환 완료 — \(text.count, privacy: .public)자")
         } catch {
+            // sttFailed → idle (error HUD는 Phase 2, 위 주석 참조).
             logger.error("[stt] 전사 실패: \(String(describing: error), privacy: .public)")
             transition(to: .idle)
             return
@@ -133,5 +141,16 @@ final class SessionCoordinator {
     private func transition(to next: SessionState) {
         logger.debug("전이: \(String(describing: self.state), privacy: .public) → \(String(describing: next), privacy: .public)")
         state = next
+        updateHUD(for: next)
+    }
+
+    /// 세션 상태를 HUD 표시 상태로 매핑 (Phase 1: recording 레벨미터 / transcribing·injecting 스피너).
+    /// error 상태는 Phase 2에 추가 (HUDState.error, PLAN 2.4/2.5) — 현재 sttFailed는 hidden으로 소멸.
+    private func updateHUD(for state: SessionState) {
+        switch state {
+        case .idle:        hud.update(.hidden)
+        case .recording:   hud.update(.recording)
+        case .transcribing, .injecting: hud.update(.processing)
+        }
     }
 }
