@@ -76,6 +76,14 @@ actor TranscribeEngine {
         let segments = whisper_full_n_segments(ctx)
         var text = ""
         for i in 0..<segments {
+            // 무음 환각 방어: whisper는 무음에서 빈 결과 대신 임의 단어를 지어낸다 (실기기에서
+            // 2.3s 무음 → "스포츠" 관찰). 세그먼트별 no_speech 확률이 문턱을 넘으면 버린다 —
+            // 전부 버려지면 emptyResult → sttFailed 경로 (TDD §3.2의 "무음 → sttFailed" 구현).
+            let noSpeechProb = whisper_full_get_segment_no_speech_prob(ctx, i)
+            guard noSpeechProb <= Self.noSpeechThreshold else {
+                logger.debug("무음 세그먼트 스킵 (no_speech \(String(format: "%.2f", noSpeechProb), privacy: .public))")
+                continue
+            }
             if let cstr = whisper_full_get_segment_text(ctx, i) {
                 text += String(cString: cstr)
             }
@@ -84,6 +92,9 @@ actor TranscribeEngine {
         guard !trimmed.isEmpty else { throw TranscribeError.emptyResult }
         return trimmed
     }
+
+    /// 세그먼트를 무음으로 판정하는 no_speech 확률 문턱 (whisper 기본값 0.6과 동일).
+    private static let noSpeechThreshold: Float = 0.6
 
     deinit {
         if let ctx { whisper_free(ctx) }

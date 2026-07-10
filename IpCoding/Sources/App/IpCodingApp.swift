@@ -26,6 +26,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
     private lazy var coordinator = SessionCoordinator(
         audioCapture: audioCapture,
         transcribeEngine: transcribeEngine,
+        refineEngine: refineEngine,
         userDictionary: userDictionary,
         promptBuilder: promptBuilder,
         injector: injector,

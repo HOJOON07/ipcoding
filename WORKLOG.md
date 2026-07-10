@@ -52,6 +52,28 @@ llama.cpp를 앱에 통합하고 RefineEngine을 구현. 2.2 최대 난관(ggml 
 
 ---
 
+## 2026-07-10 — 2.3 PromptBuilder + 2.4 상태 머신 확장 (MVP 파이프라인 완성)
+
+### 2.3 PromptBuilder
+- 프롬프트 v2를 앱 번들 리소스로 (수동 복사 의존 제거), ChatML 조립·씽킹 시드·initial_prompt 생성을 PromptBuilder로 집약 — TDD §3.3/§3.5 명세와 코드 일치, 1.6·2.2 설계 갭 해소.
+- 조립 무결 이중 확인: 프리픽스 518토큰 동일 + 실기기 useState/useReducer 회귀 없음. 리뷰 APPROVE.
+
+### 2.4 상태 머신 확장 — **"말하면 교정돼서 꽂힌다" MVP 완성**
+- TDD §2 전이표 14건 전수 구현 (refining/awaitingInjection 추가). 원칙 3 폴백 4경로(llmTimeout/llmError/빈 교정/엔진 미준비 → 원문) 전수. sttFailed → error HUD 1.5s. Esc/Tab 메서드 준비(배선은 2.6). 자동 주입 N=1.0s(2.7 확정 예정).
+- LLM 타임아웃(첫 3s/전체 8s)은 RefineProgress(@unchecked Sendable+lock)가 isCancelled로 전달, Esc와 취소 원인 구분 — 2.2 리뷰 W3 계약 이행.
+- 실기기: 군말 발화 → "어"/"음" 제거·교정 주입. **T_ready ≈ 1.2s** (예산 3.5s, 프롬프트 캐시 효과). "그러니까" 잔존은 v2 보수 성향(문서화된 정상).
+- 리뷰 CRITICAL 0: Esc 레이스 2건(W1 performInjection 가드, W2 즉시 idle 전이)·전이표 정합(W3)·flashError 세대(N1)·죽은 폴백(N2) 반영.
+
+### 발견: whisper 무음 환각 (실기기)
+- TDD §3.2 가정("무음→빈 전사")과 달리 whisper는 무음에서 환각을 지어냄 — "스포츠", ".", "감사합니다"(한국어 최다 환각) 주입 사고 관찰.
+- **2겹 방어 구축**: ① no_speech 필터(0.6) — 확신형 환각은 못 잡음(실기기 확인) ② **에너지 게이트(RMS 0.002)** — 무음 0.0004~0.0005 차단/발화 0.0104 통과, 실측 캘리브레이션 4~5배 마진.
+
+### 다음
+- 2.5 HUD 확장 (raw 표시 → 스트리밍 렌더 → ready 힌트 바 → error), 2.6 Tab/Esc 인터셉트 (준비된 escPressed/tabPressed 배선)
+- 이월: 전이 전수 단위 테스트 배정(spec-guardian 확인 필요), TDD §3.2 무음 가정 문구 갱신 검토
+
+---
+
 ## 2026-07-07 ~ 07-08 — Phase 0 착수: 환경 구축 · 벤치 하네스 · 실험 A
 
 ### 1. 무엇을 했나

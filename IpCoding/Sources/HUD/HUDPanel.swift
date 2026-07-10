@@ -22,6 +22,23 @@ final class HUDController {
         }
     }
 
+    /// 마지막 flashError의 세대 — 같은 메시지가 연달아 떠도 이전 타이머가 새 표시를 못 죽이게 한다.
+    private var flashGeneration = 0
+
+    /// 에러 배지를 duration 동안 표시 후 자동 소멸 (TDD §5 "1.5초 표시 후 소멸").
+    /// 소멸 시점에 다른 상태(새 세션의 recording, 새 flash)면 건드리지 않는다.
+    func flashError(_ message: String, duration: Duration) {
+        flashGeneration += 1
+        let generation = flashGeneration
+        update(.error(message))
+        Task { @MainActor in
+            try? await Task.sleep(for: duration)
+            if generation == self.flashGeneration, self.viewModel.state == .error(message) {
+                self.update(.hidden)
+            }
+        }
+    }
+
     private func show() {
         let panel = ensurePanel()
         reposition(panel)

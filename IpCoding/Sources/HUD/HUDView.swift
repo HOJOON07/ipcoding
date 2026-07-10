@@ -11,6 +11,8 @@ struct HUDView: View {
                 LevelMeterView(level: viewModel.level)
             case .processing:
                 ProcessingView()
+            case .error(let message):
+                ErrorView(message: message)
             case .hidden:
                 EmptyView()
             }
@@ -49,6 +51,21 @@ private struct LevelMeterView: View {
 
     private func barHeight(for index: Int) -> CGFloat {
         8 + CGFloat(index) * 5
+    }
+}
+
+/// 짧은 에러 배지 (자동 소멸은 HUDController.flashError가 관리).
+private struct ErrorView: View {
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.yellow)
+            Text(message)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.white)
+        }
     }
 }
 

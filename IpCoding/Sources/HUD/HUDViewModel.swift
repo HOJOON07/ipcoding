@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// HUD 표시 상태 (Phase 1 최소 — raw/refining/ready/error는 Phase 2 §2.5에서 확장).
+/// HUD 표시 상태. raw 표시·스트리밍 렌더·ready 힌트 바는 태스크 2.5에서 확장.
 enum HUDState: Equatable {
     case hidden
     case recording
     case processing
+    /// 짧은 에러 배지 (예: sttFailed "인식하지 못했어요" 1.5s — TDD §5, 태스크 2.4).
+    case error(String)
 }
 
 /// HUD가 렌더할 상태와 마이크 레벨을 담는 관찰 모델 (TDD §3.8).
