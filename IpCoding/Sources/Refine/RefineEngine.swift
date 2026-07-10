@@ -65,6 +65,7 @@ actor RefineEngine {
         guard let context = llama_init_from_model(loadedModel, cparams) else {
             llama_model_free(loadedModel)
             model = nil
+            vocab = nil  // 해제된 모델 내부 포인터 — 댕글링 방지 (N1).
             throw RefineError.contextCreationFailed
         }
         ctx = context
@@ -104,7 +105,7 @@ actor RefineEngine {
 
     /// 로드 직후 짧은 더미 생성 1회로 첫 발화 지연 제거 (TDD §3.3 워밍업 준용).
     func warmUp() {
-        _ = try? refineSync(rawText: "안녕", maxTokens: 4, onToken: { _ in }, isCancelled: { false })
+        _ = try? refineSync(rawText: "안녕", maxTokensCap: 4, onToken: { _ in }, isCancelled: { false })
     }
 
     /// 교정 실행. 프리픽스는 캐시된 채 raw_text+접미부만 디코드하고, 토큰을 스트리밍한다.
@@ -118,15 +119,15 @@ actor RefineEngine {
         onToken: @Sendable @escaping (String) -> Void,
         isCancelled: @Sendable @escaping () -> Bool
     ) throws -> String {
-        let maxTokens = min(1024, max(64, rawText.count * 2))
-        return try refineSync(rawText: rawText, maxTokens: maxTokens, onToken: onToken, isCancelled: isCancelled)
+        try refineSync(rawText: rawText, maxTokensCap: nil, onToken: onToken, isCancelled: isCancelled)
     }
 
     // MARK: - 생성 (프롬프트 캐시 재사용)
 
+    /// maxTokensCap: 워밍업처럼 생성 상한을 강제 제한할 때 사용 (nil이면 입력 토큰 수 기반).
     private func refineSync(
         rawText: String,
-        maxTokens: Int,
+        maxTokensCap: Int?,
         onToken: @Sendable (String) -> Void,
         isCancelled: @Sendable () -> Bool
     ) throws -> String {
@@ -147,6 +148,9 @@ actor RefineEngine {
             throw RefineError.tokenizationFailed
         }
         nPast += Int32(deltaTokens.count)
+
+        // max_tokens = min(1024, 입력 토큰 수 × 2) (TDD §3.4). 문자 수 아닌 토큰 수 기반.
+        let maxTokens = min(maxTokensCap ?? Int.max, min(1024, max(64, deltaTokens.count * 2)))
 
         // 샘플러 체인: 페널티 → top_p → temp → 분포 샘플 (TDD §3.4 확정값).
         let sampler = llama_sampler_chain_init(llama_sampler_chain_default_params())
@@ -186,6 +190,9 @@ actor RefineEngine {
 
     // MARK: - 출력 정제 (TDD §3.4)
 
+    /// 지시문 프리픽스 혼입 감지용 (TDD §3.4 정제 ③). 이 문구로 시작하면 콜론 뒤만 취한다.
+    private static let instructionPrefixes = ["출력:", "다듬은 결과:", "정리된 텍스트:", "결과:"]
+
     private func postProcess(_ raw: String) -> String {
         var text = raw
         // ④ 씽킹 잔재: <think>가 있으면 마지막 </think> 이후만.
@@ -196,6 +203,11 @@ actor RefineEngine {
         text = text.replacingOccurrences(of: "<<<", with: "")
             .replacingOccurrences(of: ">>>", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        // ③ 지시문 프리픽스 혼입 제거 (v2에선 미관찰이나 방어선, TDD §3.4 "후처리 필수").
+        for prefix in Self.instructionPrefixes where text.hasPrefix(prefix) {
+            text = String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            break
+        }
         if text.hasPrefix("\"") && text.hasSuffix("\"") && text.count >= 2 {
             text = String(text.dropFirst().dropLast())
         }
@@ -217,7 +229,11 @@ actor RefineEngine {
 
     private func tokenBytes(_ token: llama_token, vocab: OpaquePointer) -> [UInt8] {
         var buffer = [CChar](repeating: 0, count: 128)
-        let n = llama_token_to_piece(vocab, token, &buffer, Int32(buffer.count), 0, false)
+        var n = llama_token_to_piece(vocab, token, &buffer, Int32(buffer.count), 0, false)
+        if n < 0 {  // 버퍼 부족 — -n 크기로 재시도 (N3, 단일 토큰엔 사실상 미발생)
+            buffer = [CChar](repeating: 0, count: Int(-n))
+            n = llama_token_to_piece(vocab, token, &buffer, Int32(buffer.count), 0, false)
+        }
         guard n > 0 else { return [] }
         return buffer.prefix(Int(n)).map { UInt8(bitPattern: $0) }
     }
@@ -233,7 +249,7 @@ actor RefineEngine {
             batch.token[i] = tokens[i]
             batch.pos[i] = startPos + Int32(i)
             batch.n_seq_id[i] = 1
-            batch.seq_id[i]![0] = seqId
+            if let seqRow = batch.seq_id[i] { seqRow[0] = seqId }  // batch_init이 non-nil 보장, 강제언래핑 회피
             batch.logits[i] = (needLastLogits && i == Int(n) - 1) ? 1 : 0
         }
         return llama_decode(ctx, batch) == 0
