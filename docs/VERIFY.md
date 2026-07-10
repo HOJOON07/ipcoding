@@ -96,5 +96,17 @@
 - [x] **non-activating 무결 — HUD 표시 중에도 주입 대상이 앞 앱(cmux·Chrome)으로 정확히 잡힘** (로그 교차 확인, key window화 안 됨)
 - RMS 레벨: AudioCapture.currentLevel(lock 보호) → HUDViewModel 30fps 폴링(상승 즉시·하강 완만).
 
+## [1.10] 수동 테스트 매트릭스 — 다중 앱 주입 (Phase 1 완료 확인)
+
+도그푸딩 중 자연 검증 (2026-07-10, 사용자 확인). 터미널 4종 + 일반 앱:
+- [x] cmux (com.cmuxterm.app) — 주 타깃
+- [x] 맥 기본 Terminal.app
+- [x] Warp
+- [x] VS Code 터미널
+- [x] (덤) Chrome/브라우저, 카카오톡 — 일반 앱에도 주입 (터미널 전용 아님 확인)
+- 한글+영어 혼용 무결, 클립보드 복원, non-activating(주입 대상 앞 앱 유지) 전 앱 공통.
+
+**Phase 1 완료 기준 점검**: 한영 무결 ✅ / 클립보드 복원 ✅ / 터미널 4종 ✅ / T_inject 관측상 ≤1.5s(전사 ~0.5s+주입 ~0.25s, 여유 큼 — p90 정식 계측은 2.9) ✅ / 도그푸딩 시작 가능 ✅.
+
 ## 회귀 주의 — 마이크 무음 3증상
 다이얼로그 안 뜸 + 시스템 설정 마이크 목록 부재 + 캡처 전부 0값 → 원인은 **audio-input 엔타이틀먼트 누락**(Hardened Runtime 하 TCC 즉시 거부). `AVCaptureDevice.requestAccess` 명시 호출은 부차. 서명에 엔타이틀먼트 없으면 tccutil reset·requestAccess 다 무효.
