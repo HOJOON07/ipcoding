@@ -126,5 +126,15 @@
 - **batch_get_one 자동 위치 추적**은 seq 조작 후 어긋남 → 명시적 pos batch 사용.
 - llama.h가 ggml-opt.h 전이 include, C++ 래퍼 llama-cpp.h는 모듈맵 제외 (build-engine.sh 반영).
 
+## [2.3] PromptBuilder — 프롬프트 조립 정식화
+
+구조: 번들 리소스 refine_v2.txt(벤치 정본과 diff 0) → PromptBuilder가 {dictionary_pairs}="(없음)" 고정 + ChatML 조립(씽킹 시드) + whisper initial_prompt 생성. 임시 Application Support 파일 로드 제거.
+
+- [x] refine_v2.txt가 앱 번들 Resources에 자동 포함 (폴더 동기화 그룹) (2026-07-10)
+- [x] 조립 무결성: 프리픽스 캐시 518토큰 — 2.2 인라인 조립과 동일 (v2 프롬프트 무변형 증거)
+- [x] 실기기 회귀: "유즈스테이트/유즈리듀서" 발화 → useState/useReducer 정확 주입 (initial_prompt가 PromptBuilder 경로로 정상, 사용자 확인)
+- 설계 갭 해소: TDD §3.3(initial_prompt 생성 주체)·§3.5(ChatML 조립 주체) 명세와 코드 일치. UserDictionary는 치환 데이터·적용만 담당.
+- 이월 항목 (2.3 리뷰 NIT): ① PromptBuilder 골든 테스트는 태스크 2.10에 편입 ② 사전이 자라면 whisper initial_prompt 토큰 한도(절삭 동작)를 macos-api-researcher로 조사 후 상한 정책 결정.
+
 ## 회귀 주의 — 마이크 무음 3증상
 다이얼로그 안 뜸 + 시스템 설정 마이크 목록 부재 + 캡처 전부 0값 → 원인은 **audio-input 엔타이틀먼트 누락**(Hardened Runtime 하 TCC 즉시 거부). `AVCaptureDevice.requestAccess` 명시 호출은 부차. 서명에 엔타이틀먼트 없으면 tccutil reset·requestAccess 다 무효.

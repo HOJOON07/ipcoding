@@ -78,17 +78,6 @@ final class UserDictionary {
         return result
     }
 
-    /// Whisper initial_prompt에 넣을 용어 문자열 (표준 표기를 콤마로 결합).
-    /// whisper가 이 표기대로 출력하도록 유도 (Phase 0: 적중률 +26.9%p). 비면 nil.
-    ///
-    /// Phase 1 임시 구현: 교정 사전의 written만 용어원으로 쓴다. 한계 — 교정 사전은 "틀리는
-    /// 것"만 담아 "이미 잘 맞는 용어"(useState 등)를 미포함하므로 initial_prompt 커버리지가
-    /// 좁다. Phase 2(태스크 2.3)에서 PromptBuilder 도입 시, 교정 사전과 별개의 기술용어 목록을
-    /// 용어원으로 분리할지 재설계한다 (TDD §3.3·§3.5). 이관 전까지 UserDictionary가 임시 담당.
-    func initialPromptTerms() -> String? {
-        let terms = entries.map(\.written)
-        let unique = NSOrderedSet(array: terms).array as? [String] ?? terms
-        let joined = unique.joined(separator: ", ")
-        return joined.isEmpty ? nil : joined
-    }
+    // initial_prompt 용어 생성은 PromptBuilder 소관 (TDD §3.3, 태스크 2.3에서 이관).
+    // 이 타입은 치환 데이터(entries)와 적용(apply)만 담당한다.
 }

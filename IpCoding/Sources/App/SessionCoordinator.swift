@@ -24,6 +24,7 @@ final class SessionCoordinator {
     private let audioCapture: AudioCapture
     private let transcribeEngine: TranscribeEngine
     private let userDictionary: UserDictionary
+    private let promptBuilder: PromptBuilder
     private let injector: any Injecting
     private let hud: HUDController
     private let logger = Logger(subsystem: "com.hojoon.ipcoding", category: "coordinator")
@@ -32,12 +33,14 @@ final class SessionCoordinator {
         audioCapture: AudioCapture,
         transcribeEngine: TranscribeEngine,
         userDictionary: UserDictionary,
+        promptBuilder: PromptBuilder,
         injector: any Injecting,
         hud: HUDController
     ) {
         self.audioCapture = audioCapture
         self.transcribeEngine = transcribeEngine
         self.userDictionary = userDictionary
+        self.promptBuilder = promptBuilder
         self.injector = injector
         self.hud = hud
         // HUD 레벨 미터가 마이크 입력에 반응하도록 연결.
@@ -114,7 +117,7 @@ final class SessionCoordinator {
         do {
             let raw = try await transcribeEngine.transcribe(
                 samples: samples,
-                initialPrompt: userDictionary.initialPromptTerms()
+                initialPrompt: promptBuilder.whisperInitialPrompt()
             )
             text = userDictionary.apply(to: raw)  // 사전 치환 (TDD §3.6 ①)
             logger.info("[stt] 전사+치환 완료 — \(text.count, privacy: .public)자")

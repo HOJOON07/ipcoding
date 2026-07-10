@@ -79,18 +79,13 @@ actor RefineEngine {
         prefixTokenCount = 0
     }
 
-    /// 프롬프트 템플릿(플레이스홀더 {raw_text} 포함)을 받아 ChatML로 감싸고, 고정 프리픽스를
-    /// KV에 디코드해 상주시킨다 (프롬프트 캐시 준비, TDD §3.4/§3.5). 로드 후 1회.
-    func preparePrompt(template: String) throws {
+    /// PromptBuilder가 조립한 ChatML 프리픽스/접미부를 받아, 고정 프리픽스를 KV에 디코드해
+    /// 상주시킨다 (프롬프트 캐시 준비, TDD §3.4 — 조립은 §3.5 PromptBuilder 소관). 로드 후 1회.
+    func preparePrompt(parts: RefinePromptParts) throws {
         guard let ctx, let vocab else { throw RefineError.notLoaded }
 
-        // {raw_text} 기준으로 분할. 앞부분은 ChatML user 열기와 함께 고정 프리픽스,
-        // 뒷부분은 고정 접미부(+ assistant 씽킹 시드, 2.1 스파이크).
-        let parts = template.components(separatedBy: "{raw_text}")
-        let beforeRaw = parts.first ?? template
-        let afterRaw = parts.count > 1 ? parts[1] : ""
-        prefixString = "<|im_start|>user\n" + beforeRaw
-        suffixString = afterRaw + "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+        prefixString = parts.prefix
+        suffixString = parts.suffix
 
         // 프리픽스를 seq 0에 디코드해 상주(캐시). 매 세션 seq 1로 복사해 재사용한다.
         let prefixTokens = tokenize(prefixString, vocab: vocab, addSpecial: true)
