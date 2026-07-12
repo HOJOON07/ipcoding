@@ -82,9 +82,9 @@ final class SessionCoordinator {
     /// awaitingInjection의 자동 주입 타이머 태스크.
     private var injectionTimer: Task<Void, Never>?
 
-    /// 자동 주입 대기시간 N — 1.5s (PRD §10-3 후보 범위 0.5~1.5s. 도그푸딩 피드백
-    /// "너무 빨리 닫힘"(2026-07-12)으로 1.0→1.5s 상향. 조절 UI·최종 확정은 태스크 2.7).
-    private let autoInjectDelay: Duration = .milliseconds(1500)
+    /// 자동 주입 대기시간 N (PRD §10-3 확정: 기본 0.5s — 2026-07-12 도그푸딩). 앱이
+    /// UserDefaults/메뉴에서 설정한다 (태스크 2.7). 0 = 즉시 주입 (Tab/Esc 창 사실상 없음).
+    var autoInjectDelay: Duration = .milliseconds(500)
 
     private let audioCapture: AudioCapture
     private let transcribeEngine: TranscribeEngine

@@ -37,6 +37,14 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
+        // 자동 주입 대기 N 기본값 등록 (태스크 2.7, PRD §10-3 확정 0.5s) —
+        // 메뉴 체크마크가 이 값을 읽으므로 메뉴 생성보다 먼저 등록해야 한다.
+        UserDefaults.standard.register(defaults: [Self.injectDelayKey: 500])
+        // 목록 외 저장값(수동 편집 등)은 기본값으로 정규화 — 체크마크 실종·이상 지연 방어.
+        if !Self.injectDelayOptions.contains(UserDefaults.standard.integer(forKey: Self.injectDelayKey)) {
+            UserDefaults.standard.set(500, forKey: Self.injectDelayKey)
+        }
+
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(
             systemSymbolName: "mic.fill",
@@ -44,7 +52,9 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         )
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "입코딩 v0.1 (Phase 1)", action: nil, keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "입코딩 v0.1 (Phase 2)", action: nil, keyEquivalent: ""))
+        menu.addItem(.separator())
+        menu.addItem(makeInjectDelayMenuItem())
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "종료",
@@ -55,6 +65,8 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
 
         statusItem = item
 
+        coordinator.autoInjectDelay = .milliseconds(UserDefaults.standard.integer(forKey: Self.injectDelayKey))
+
         // 메뉴바 아이콘 상태 연동 (TDD §3.8) — 코디네이터 전이가 구동.
         coordinator.menuBarUpdater = { [weak self] state in
             self?.updateStatusIcon(for: state)
@@ -62,6 +74,38 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
 
         prepareModels()
         startInput()
+    }
+
+    // MARK: - 자동 주입 대기 N 메뉴 (태스크 2.7, PRD §10-3)
+
+    private static let injectDelayKey = "autoInjectDelayMs"
+    private static let injectDelayOptions: Set<Int> = [0, 500, 1000, 1500, 2000]
+
+    private func makeInjectDelayMenuItem() -> NSMenuItem {
+        let root = NSMenuItem(title: "자동 주입 대기", action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        let current = UserDefaults.standard.integer(forKey: Self.injectDelayKey)
+        let options: [(String, Int)] = [
+            ("즉시 (Tab/Esc 창 없음)", 0),
+            ("0.5초", 500), ("1.0초", 1000), ("1.5초", 1500), ("2.0초", 2000),
+        ]
+        for (label, ms) in options {
+            let item = NSMenuItem(title: label, action: #selector(selectInjectDelay(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = ms
+            item.state = (ms == current) ? .on : .off
+            submenu.addItem(item)
+        }
+        root.submenu = submenu
+        return root
+    }
+
+    @objc private func selectInjectDelay(_ sender: NSMenuItem) {
+        guard let ms = sender.representedObject as? Int else { return }
+        UserDefaults.standard.set(ms, forKey: Self.injectDelayKey)
+        coordinator.autoInjectDelay = .milliseconds(ms)
+        sender.menu?.items.forEach { $0.state = ($0 === sender) ? .on : .off }
+        logger.info("자동 주입 대기 변경 — \(ms, privacy: .public)ms")
     }
 
     /// 상태별 메뉴바 아이콘: idle 마이크(템플릿) / 녹음 빨간 마이크+펄스 / 처리 웨이브폼.
