@@ -8,10 +8,14 @@ enum HUDState: Equatable {
     case processing
     /// 교정 중: 원문 dim + 스트리밍 텍스트가 타자 치듯 쌓임 (PRD §4 ③).
     case refining(raw: String, streamed: String)
-    /// 완성 텍스트 + 힌트 바. usedFallback이면 "원문 사용" 배지 (llmTimeout/Error — TDD §2).
-    case ready(text: String, usedFallback: Bool)
+    /// 완성: 원문 dim과 교정 결과를 병기 (주입 전 비교 — 원칙 4) + 힌트 칩.
+    /// usedFallback이면 "원문 사용" 배지 (llmTimeout/Error — TDD §2).
+    case ready(raw: String, text: String, usedFallback: Bool)
     /// 짧은 에러 배지 (예: sttFailed "인식하지 못했어요" 1.5s — TDD §5).
     case error(String)
+    /// 주입 후 결과 유지 카드: 원문·교정 병기 + ✓ — 사용자가 비교를 충분히 관찰하도록
+    /// 5s 유지 후 소멸 (도그푸딩 피드백 2026-07-12).
+    case injected(raw: String, text: String)
 }
 
 /// HUD가 렌더할 상태와 마이크 레벨을 담는 관찰 모델 (TDD §3.8).

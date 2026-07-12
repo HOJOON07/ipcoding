@@ -1,53 +1,156 @@
 import SwiftUI
 
-/// HUD 내용 뷰 (TDD §3.8). 텍스트 상태는 폭 최대 560pt·4줄 제한.
+/// 브랜드 그라데이션 (Siri풍 인디고→퍼플). 오브 채움·글로우·카드 테두리에 공통 사용.
+enum HUDStyle {
+    static let gradientColors = [
+        Color(red: 0.37, green: 0.36, blue: 0.92),   // 인디고
+        Color(red: 0.62, green: 0.33, blue: 0.96),   // 바이올렛
+        Color(red: 0.78, green: 0.36, blue: 0.95),   // 퍼플
+    ]
+    static var gradient: LinearGradient {
+        LinearGradient(colors: gradientColors, startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+    static let orbSize: CGFloat = 64
+    static let cardWidth: CGFloat = 560
+    static let glowColor = Color(red: 0.62, green: 0.33, blue: 0.96)
+    /// 글로우가 퍼질 투명 여백 — 패널 경계에서 블러가 사각형으로 잘리는 아티팩트 방지.
+    static let glowPadding: CGFloat = 32
+}
+
+/// HUD 내용 뷰 (TDD §3.8 리디자인 — 모핑 오브). 오브(녹음·처리) ↔ 카드(텍스트 단계)가
+/// 하나의 컨테이너에서 스프링 모핑으로 전환된다. 우상단 앵커는 HUDController가 담당.
 struct HUDView: View {
     @ObservedObject var viewModel: HUDViewModel
 
-    /// 텍스트 상태(refining/ready)인지 — 확정 폭을 줘야 줄바꿈·4줄 제한이 동작한다.
-    private var isTextState: Bool {
+    /// 크기 클래스: 오브(녹음·처리, 64pt 원) / 카드(텍스트 단계, 560pt — 원칙 4 미리보기) /
+    /// 배지(완료·에러 — 내용 크기의 컴팩트 필).
+    private enum SizeClass { case orb, card, badge }
+
+    private var sizeClass: SizeClass {
         switch viewModel.state {
-        case .refining, .ready: return true
-        default: return false
+        case .recording, .processing: return .orb
+        case .refining, .ready, .injected: return .card
+        case .error, .hidden: return .badge
+        }
+    }
+
+    private var cornerRadius: CGFloat {
+        switch sizeClass {
+        case .orb: return HUDStyle.orbSize / 2
+        case .card: return 20
+        case .badge: return 14
         }
     }
 
     var body: some View {
-        Group {
-            switch viewModel.state {
-            case .recording:
-                LevelMeterView(level: viewModel.level)
-            case .processing:
-                ProcessingView()
-            case .refining(let raw, let streamed):
-                RefiningView(raw: raw, streamed: streamed)
-            case .ready(let text, let usedFallback):
-                ReadyView(text: text, usedFallback: usedFallback)
-            case .error(let message):
-                ErrorView(message: message)
-            case .hidden:
-                EmptyView()
+        content
+            .frame(width: sizeClass == .card ? HUDStyle.cardWidth : (sizeClass == .orb ? HUDStyle.orbSize : nil))
+            .frame(minHeight: sizeClass == .orb ? HUDStyle.orbSize : nil)
+            .background(backgroundShape)
+            // 글로우 여백 — 그림자·블러가 패널 경계 안에서 자연 감쇠하도록 (사각 잘림 방지).
+            .padding(HUDStyle.glowPadding)
+            .fixedSize(horizontal: sizeClass != .card, vertical: true)
+            // 상태 전환(오브↔카드↔배지 크기·모서리·내용)이 스프링으로 모핑된다.
+            .animation(.spring(duration: 0.35, bounce: 0.25), value: viewModel.state)
+            .onGeometryChange(for: CGSize.self) { proxy in
+                proxy.size
+            } action: { size in
+                viewModel.onContentSizeChange?(size)
             }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch viewModel.state {
+        case .recording:
+            OrbWaveformView(level: viewModel.level)
+                .frame(width: HUDStyle.orbSize, height: HUDStyle.orbSize)
+                .transition(.opacity)
+        case .processing:
+            OrbProcessingView()
+                .frame(width: HUDStyle.orbSize, height: HUDStyle.orbSize)
+                .transition(.opacity)
+        case .refining(let raw, let streamed):
+            RefiningCardView(raw: raw, streamed: streamed)
+                .transition(.opacity)
+        case .ready(let raw, let text, let usedFallback):
+            ReadyCardView(raw: raw, text: text, usedFallback: usedFallback)
+                .transition(.opacity)
+        case .injected(let raw, let text):
+            InjectedCardView(raw: raw, text: text)
+                .transition(.opacity)
+        case .error(let message):
+            ErrorBadgeView(message: message)
+                .transition(.opacity)
+        case .hidden:
+            EmptyView()
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        // 텍스트 상태는 확정 폭 560 — 줄바꿈·lineLimit(4)이 동작하고(리뷰 CRITICAL),
-        // 스트리밍 중 폭이 변하지 않아 가로 지터도 없다(W3). 세로만 내용에 맞게(fixedSize V).
-        .frame(width: isTextState ? 560 : nil)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.black.opacity(0.85))
-        )
-        .fixedSize(horizontal: !isTextState, vertical: true)
-        .onGeometryChange(for: CGSize.self) { proxy in
-            proxy.size
-        } action: { size in
-            viewModel.onContentSizeChange?(size)
+    }
+
+    /// 오브: 그라데이션 채움 + 목소리 반응 글로우 / 카드·배지: 머티리얼 + 그라데이션 테두리.
+    @ViewBuilder
+    private var backgroundShape: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        if sizeClass == .orb {
+            shape.fill(HUDStyle.gradient)
+                .shadow(
+                    color: HUDStyle.glowColor.opacity(0.45 + Double(viewModel.level) * 0.4),
+                    radius: 14 + CGFloat(viewModel.level) * 14
+                )
+        } else {
+            shape.fill(.ultraThinMaterial)
+                .overlay(shape.fill(.black.opacity(0.35)))
+                .overlay(shape.strokeBorder(HUDStyle.gradient.opacity(0.55), lineWidth: 1))
+                .shadow(color: .black.opacity(0.35), radius: 18, y: 6)
         }
     }
 }
 
-/// 세션 텍스트 공통 스타일 (4줄 제한 — TDD §3.8. 페이드 대신 꼬리 말줄임, 폴리시는 §3.8 후속).
+// MARK: - 오브 (녹음: 웨이브폼 / 처리: 회전 링)
+
+/// 목소리에 춤추는 웨이브폼 + 숨쉬는 스케일.
+private struct OrbWaveformView: View {
+    let level: Float
+    private let barCount = 5
+
+    var body: some View {
+        HStack(spacing: 3.5) {
+            ForEach(0..<barCount, id: \.self) { index in
+                Capsule()
+                    .fill(.white)
+                    .frame(width: 4, height: barHeight(index))
+            }
+        }
+        .animation(.easeOut(duration: 0.08), value: level)
+        .scaleEffect(1 + CGFloat(level) * 0.08)  // 숨쉬는 오브
+    }
+
+    /// 가운데가 큰 산 모양 + 레벨 반응.
+    private func barHeight(_ index: Int) -> CGFloat {
+        let centerness = 1 - abs(CGFloat(index) - 2) / 2   // 0.0(가장자리)~1.0(중앙)
+        let base: CGFloat = 8 + centerness * 6
+        return base + CGFloat(level) * (10 + centerness * 14)
+    }
+}
+
+/// 처리 중: 회전하는 흰색 아크 (생각 중).
+private struct OrbProcessingView: View {
+    @State private var rotating = false
+
+    var body: some View {
+        Circle()
+            .trim(from: 0.12, to: 0.88)
+            .stroke(.white.opacity(0.9), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+            .frame(width: 26, height: 26)
+            .rotationEffect(.degrees(rotating ? 360 : 0))
+            .animation(.linear(duration: 0.9).repeatForever(autoreverses: false), value: rotating)
+            .onAppear { rotating = true }
+    }
+}
+
+// MARK: - 카드 (텍스트 단계)
+
+/// 세션 텍스트 공통 스타일 (4줄 제한 — TDD §3.8).
 private struct SessionText: View {
     let text: String
     var dimmed = false
@@ -55,58 +158,144 @@ private struct SessionText: View {
     var body: some View {
         Text(text.isEmpty ? " " : text)
             .font(.system(size: 13))
-            .foregroundStyle(.white.opacity(dimmed ? 0.35 : 1))
+            .foregroundStyle(.white.opacity(dimmed ? 0.35 : 0.95))
             .lineLimit(4)
             .truncationMode(.tail)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-/// 교정 중: 원문 dim + 스트리밍 텍스트가 타자 치듯 쌓임 (PRD §4 ③).
-private struct RefiningView: View {
-    let raw: String
-    let streamed: String
+/// 행 라벨 ("원문"/"교정") — 어떤 텍스트가 무엇인지 명시 (주입 전 비교).
+private struct RowLabel: View {
+    let text: String
+    var accent = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SessionText(text: raw, dimmed: true)
-            HStack(spacing: 0) {
-                SessionText(text: streamed)
-                if streamed.isEmpty {
-                    ProgressView().controlSize(.mini).tint(.white)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+        Text(text)
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(accent ? AnyShapeStyle(HUDStyle.gradient) : AnyShapeStyle(.white.opacity(0.4)))
+            .frame(width: 26, alignment: .leading)
+            .padding(.top, 2)
+    }
+}
+
+/// 교정 중 카드: "원문" dim + "교정" 스트리밍 텍스트(블록 커서).
+private struct RefiningCardView: View {
+    let raw: String
+    let streamed: String
+    @State private var cursorVisible = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .top, spacing: 8) {
+                RowLabel(text: "원문")
+                SessionText(text: raw, dimmed: true)
+            }
+            HStack(alignment: .top, spacing: 8) {
+                RowLabel(text: "교정", accent: true)
+                SessionText(text: streamed + (cursorVisible ? "▌" : " "))
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .task {
+            // 문자열 내용 변경은 애니메이터블이 아니라 withAnimation.repeatForever가 무효 —
+            // Task 루프로 토글 (뷰 소멸 시 자동 취소).
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(550))
+                cursorVisible.toggle()
             }
         }
     }
 }
 
-/// 완성 텍스트 + 단축키 힌트 바 (PRD §4 ④). usedFallback이면 "원문 사용" 배지 (TDD §2).
-private struct ReadyView: View {
+/// 완성 카드: 원문 dim + 교정 결과 병기 (원칙 4 — 주입 전 비교, 2026-07-12 사용자 요청)
+/// + 키캡 힌트 칩 (표시 전용 — 입력은 이벤트 탭, TDD §3.8).
+private struct ReadyCardView: View {
+    let raw: String
     let text: String
     let usedFallback: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SessionText(text: text)
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                RowLabel(text: "원문")
+                SessionText(text: raw, dimmed: true)
+            }
+            HStack(alignment: .top, spacing: 8) {
+                RowLabel(text: "교정", accent: true)
+                SessionText(text: text)
+            }
+            HStack(spacing: 6) {
                 if usedFallback {
                     Text("원문 사용")
                         .font(.system(size: 10, weight: .semibold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Capsule().fill(.orange.opacity(0.85)))
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Capsule().fill(.orange.opacity(0.9)))
                         .foregroundStyle(.black)
                 }
-                Text("잠시 후 자동 주입 · Esc 취소 · Tab 원문 사용")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.55))
+                KeycapChip(symbol: "timer", label: "잠시 후 자동")
+                KeycapChip(symbol: "arrow.right.to.line", label: "Tab 원문")
+                KeycapChip(symbol: "escape", label: "Esc 취소")
+                Spacer()
             }
         }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+    }
+}
+
+/// 키캡 스타일 힌트 칩 (시각 표시 전용 — 클릭 인터랙션은 PRD §10-8 미결).
+private struct KeycapChip: View {
+    let symbol: String
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol).font(.system(size: 9, weight: .semibold))
+            Text(label).font(.system(size: 10, weight: .medium))
+        }
+        .foregroundStyle(.white.opacity(0.75))
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(.white.opacity(0.08))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white.opacity(0.16), lineWidth: 0.5))
+        )
+    }
+}
+
+/// 주입 후 결과 유지 카드: 원문·교정 병기 + ✓ 주입 완료 (5s 유지 — 도그푸딩 2026-07-12).
+private struct InjectedCardView: View {
+    let raw: String
+    let text: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                RowLabel(text: "원문")
+                SessionText(text: raw, dimmed: true)
+            }
+            HStack(alignment: .top, spacing: 8) {
+                RowLabel(text: "교정", accent: true)
+                SessionText(text: text)
+            }
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.green)
+                Text("주입 완료")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
     }
 }
 
 /// 짧은 에러 배지 (자동 소멸은 HUDController.flashError가 관리).
-private struct ErrorView: View {
+private struct ErrorBadgeView: View {
     let message: String
 
     var body: some View {
@@ -117,46 +306,7 @@ private struct ErrorView: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white)
         }
-    }
-}
-
-/// 마이크 입력 레벨에 반응하는 막대 미터.
-private struct LevelMeterView: View {
-    let level: Float
-    private let barCount = 5
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "mic.fill")
-                .foregroundStyle(.red)
-            HStack(spacing: 4) {
-                ForEach(0..<barCount, id: \.self) { index in
-                    let threshold = Float(index + 1) / Float(barCount)
-                    Capsule()
-                        .fill(level >= threshold * 0.7 ? Color.white : Color.white.opacity(0.25))
-                        .frame(width: 5, height: barHeight(for: index))
-                }
-            }
-            .animation(.easeOut(duration: 0.08), value: level)
-        }
-        .foregroundStyle(.white)
-    }
-
-    private func barHeight(for index: Int) -> CGFloat {
-        8 + CGFloat(index) * 5
-    }
-}
-
-/// 처리 중 스피너.
-private struct ProcessingView: View {
-    var body: some View {
-        HStack(spacing: 10) {
-            ProgressView()
-                .controlSize(.small)
-                .tint(.white)
-            Text("처리 중…")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white)
-        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
     }
 }

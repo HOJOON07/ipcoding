@@ -64,6 +64,9 @@ final class SessionCoordinator {
 
     private(set) var state: SessionState = .idle
 
+    /// 메뉴바 아이콘 갱신 훅 (TDD §3.8: 코디네이터가 구동, 아이콘 쪽엔 상태 머신 없음).
+    var menuBarUpdater: ((SessionState) -> Void)?
+
     /// 세대 토큰 — hotkeyDown이 미룬 엔진 start를, 그 사이 도착한 up/cancel이 무효화하는 데 쓴다.
     private var startGeneration = 0
 
@@ -76,8 +79,9 @@ final class SessionCoordinator {
     /// awaitingInjection의 자동 주입 타이머 태스크.
     private var injectionTimer: Task<Void, Never>?
 
-    /// 자동 주입 대기시간 N — 기본 1.0s (PRD §10-3, 태스크 2.7에서 도그푸딩으로 확정·조절 UI).
-    private let autoInjectDelay: Duration = .seconds(1)
+    /// 자동 주입 대기시간 N — 1.5s (PRD §10-3 후보 범위 0.5~1.5s. 도그푸딩 피드백
+    /// "너무 빨리 닫힘"(2026-07-12)으로 1.0→1.5s 상향. 조절 UI·최종 확정은 태스크 2.7).
+    private let autoInjectDelay: Duration = .milliseconds(1500)
 
     private let audioCapture: AudioCapture
     private let transcribeEngine: TranscribeEngine
@@ -284,7 +288,7 @@ final class SessionCoordinator {
         guard state == .refining else { return }  // 전이표에 있는 진입 경로는 refining뿐
         refinedText = text
         transition(to: .awaitingInjection)
-        hud.update(.ready(text: text, usedFallback: usedFallback))
+        hud.update(.ready(raw: rawText ?? text, text: text, usedFallback: usedFallback))
         injectionTimer = Task { @MainActor in
             try? await Task.sleep(for: autoInjectDelay)
             guard !Task.isCancelled else { return }
@@ -296,15 +300,23 @@ final class SessionCoordinator {
     /// Esc 등으로 상태가 바뀌었으면 주입하지 않는다 (idle→injecting은 전이표에 없음).
     private func performInjection(_ text: String) async {
         guard state == .awaitingInjection else { return }
+        let raw = rawText ?? text  // idle 전이가 세션 데이터를 폐기하므로 유지 카드용으로 캡처
         transition(to: .injecting)
+        var injected = false
         do {
             try await injector.inject(text)
+            injected = true
             logger.info("[inject] 주입 완료")
         } catch {
             // 주입 실패 시 HUD 결과 유지 + 복사 버튼은 TDD §5 — HUD 확장(2.5+) 몫. 지금은 로그만.
             logger.error("[inject] 주입 실패: \(String(describing: error), privacy: .public)")
         }
         transition(to: .idle)
+        if injected {
+            // 주입 후 원문·교정 비교 카드를 5s 유지 (도그푸딩 2026-07-12 — 충분한 관찰 시간).
+            // 새 세션이 시작되면 즉시 대체된다.
+            hud.flash(.injected(raw: raw, text: text), duration: .seconds(5))
+        }
     }
 
     // MARK: - 전이
@@ -321,6 +333,7 @@ final class SessionCoordinator {
             injectionTimer = nil
         }
         updateHUD(for: next)
+        menuBarUpdater?(next)
     }
 
     /// 세션 상태 → HUD 매핑 (TDD §3.8 상태별 뷰, 2.5).

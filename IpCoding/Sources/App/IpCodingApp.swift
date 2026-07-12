@@ -55,8 +55,44 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
 
         statusItem = item
 
+        // 메뉴바 아이콘 상태 연동 (TDD §3.8) — 코디네이터 전이가 구동.
+        coordinator.menuBarUpdater = { [weak self] state in
+            self?.updateStatusIcon(for: state)
+        }
+
         prepareModels()
         startInput()
+    }
+
+    /// 상태별 메뉴바 아이콘: idle 마이크(템플릿) / 녹음 빨간 마이크+펄스 / 처리 웨이브폼.
+    /// 임시 SF Symbol — 최종 아이콘 자산은 태스크 3.5.
+    private func updateStatusIcon(for state: SessionState) {
+        guard let button = statusItem?.button else { return }
+        button.layer?.removeAnimation(forKey: "ipcoding.pulse")
+
+        switch state {
+        case .idle:
+            button.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "입코딩")
+            button.image?.isTemplate = true
+        case .recording:
+            let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
+            let image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "녹음 중")?
+                .withSymbolConfiguration(config)
+            image?.isTemplate = false
+            button.image = image
+            // 녹음 중 펄스 (숨쉬는 투명도).
+            button.wantsLayer = true
+            let pulse = CABasicAnimation(keyPath: "opacity")
+            pulse.fromValue = 1.0
+            pulse.toValue = 0.35
+            pulse.duration = 0.6
+            pulse.autoreverses = true
+            pulse.repeatCount = .infinity
+            button.layer?.add(pulse, forKey: "ipcoding.pulse")
+        case .transcribing, .refining, .awaitingInjection, .injecting:
+            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "처리 중")
+            button.image?.isTemplate = true
+        }
     }
 
     /// 태스크 1.4·1.5: 모델 디렉토리 보장 + 사전 로드 + whisper 로드·워밍업.

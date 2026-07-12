@@ -61,7 +61,7 @@ IpCoding/
   recording     --hotkeyUp-->          transcribing   (AudioCapture.stop → buffer, HUD.show(.processing))
   recording     --hotkeyCancelled-->   idle           (녹음 중단, 버퍼 폐기, HUD 즉시 소멸 — 디바운스 오조작, 에러 표시 없음)
   recording     --maxDuration(60s)-->  transcribing   (강제 마감)
-  transcribing  --sttDone(raw)-->      refining       (사전 치환 적용 → HUD.show(.raw(text)), RefineEngine.start)
+  transcribing  --sttDone(raw)-->      refining       (사전 치환 적용 → HUD.show(.refining(raw, streamed:"")), RefineEngine.start)
   transcribing  --sttFailed-->         idle           (HUD.show(.error) 1.5s 후 소멸)
   refining      --token(t)-->          refining       (HUD.append(t))
   refining      --llmDone(refined)-->  awaitingInjection (HUD.show(.ready), N초 타이머 시작)
@@ -70,7 +70,7 @@ IpCoding/
   awaitingInjection --timerFired-->    injecting      (refined 주입)
   awaitingInjection --tabPressed-->    injecting      (raw 주입)
   awaitingInjection --escPressed-->    idle
-  injecting     --done-->              idle           (HUD 소멸)
+  injecting     --done-->              idle           (HUD는 원문·교정 비교 카드를 5s 유지 후 소멸 — 도그푸딩 2026-07-12. 새 세션 시작 시 즉시 대체)
 
 전 상태 공통: hotkeyDown은 idle에서만 유효. 세션 중 재입력은 무시(레이스 방지).
 ```
@@ -171,13 +171,15 @@ protocol Injecting { func inject(_ text: String) async throws }
 - **UnicodeEventInjector (옵션)**: `CGEventKeyboardSetUnicodeString`으로 유니코드 직접 주입. 이벤트당 UTF-16 20단위 안팎으로 청크 분할, 청크 사이 1ms 대기. 한글은 완성형 문자열로 들어가므로 IME 조합 미개입.
 - 대상 검증: 주입 직전 frontmost app을 로깅(디버깅용). 자기 자신(HUD)이 frontmost가 아님을 보장하는 것이 HUD non-activating 요구의 이유.
 
-### 3.8 HUDPanel
+### 3.8 HUDPanel (2026-07-12 리디자인 — "모핑 오브", 사용자 승인)
 
-- `NSPanel(style: .nonactivatingPanel)`, `level = .statusBar`, `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`, `becomesKeyOnlyIfNeeded = true`. **절대 makeKey 하지 않는다.**
-- 위치: 활성 화면 하단 중앙, 하단에서 120pt. 멀티모니터: 마우스가 있는 화면 기준.
-- 상태별 뷰: recording(파형 — 오디오 RMS 레벨 미터), raw(원문 텍스트), refining(원문 dim + 스트리밍 텍스트), ready(완성 텍스트 + 단축키 힌트 바), error.
-- 텍스트가 길면 최대 4줄 + 페이드, 폭 최대 560pt.
-- Tab/Esc 입력은 HUD가 아니라 HotkeyManager의 이벤트 탭이 처리(§3.1) — HUD는 표시 전용.
+- `NSPanel(style: .nonactivatingPanel)`, `level = .statusBar`, `collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]`, `becomesKeyOnlyIfNeeded = true`. **절대 makeKey 하지 않는다.** `ignoresMouseEvents = true` — 클릭 통과, 힌트 칩은 시각 표시 전용.
+- 위치: 활성 화면 **우상단** — 메뉴바 아래(visibleFrame 상단에서 8pt, 우측에서 16pt; macOS Siri와 동일 영역, 수치는 실기기 튜닝 가능). **우상단 앵커 고정** — 카드 확장 시 좌·하방으로만 자란다. 멀티모니터: 마우스가 있는 화면 기준, 표시 시점에 고정(세션 중 마우스 이동으로 점프하지 않음).
+- 형태: 녹음·처리 중엔 **컴팩트 오브**(원형 ~64pt, 인디고→퍼플 그라데이션 글로우, 반투명 머티리얼), 텍스트 단계에서 **카드로 스프링 모핑 확장**, 주입 후 축소·소멸. **텍스트 단계는 반드시 카드로 확장해 완성 텍스트를 표시한다** — 오브 상태로 주입하는 경로 금지(원칙 4 "주입 전 미리보기"의 구현 조건).
+- 상태별 뷰: recording(오브 — RMS 레벨 반응 웨이브폼·글로우), processing(오브 — 처리 애니메이션), refining(카드 — "원문" 라벨 dim 텍스트 + "교정" 스트리밍 텍스트), ready(카드 — **원문 dim과 교정 결과를 라벨과 함께 병기**(주입 전 비교 — 원칙 4 강화, 2026-07-12 사용자 요청) + 단축키 힌트 칩, 폴백 시 "원문 사용" 배지), injected(주입 후 비교 카드 5s 유지 + ✓ 주입 완료 — 새 세션 시 즉시 대체), error(배지).
+- 카드 텍스트가 길면 최대 4줄 + 페이드, 폭 최대 560pt.
+- Tab/Esc 입력은 HUD가 아니라 HotkeyManager의 이벤트 탭이 처리(§3.1) — HUD는 표시 전용. (힌트 칩 클릭 인터랙션 제공 여부는 PRD §10-8 미결.)
+- 메뉴바 아이콘 상태 연동: SessionCoordinator가 상태 전이 시 NSStatusItem 아이콘을 갱신한다(idle / 녹음 펄스 / 처리 중). 단방향 규칙 준수 — 코디네이터가 구동하고 아이콘 쪽에 상태 머신을 두지 않는다.
 
 ### 3.9 ModelManager
 

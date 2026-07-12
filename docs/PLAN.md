@@ -62,8 +62,9 @@
 | 2.3 | PromptBuilder: 시스템 프롬프트 v2 조립 + initial_prompt용 사전 용어 생성. LLM 프롬프트에 사전 미주입({dictionary_pairs}="(없음)" 고정, TDD §3.6) | 1.6 | Phase 0 산출물 |
 | 2.4 | 상태 머신 확장: refining / awaitingInjection, 폴백 경로 | 2.2 | TDD §2 전이표 전수 구현. sttFailed→idle 시 error HUD "인식하지 못했어요" 1.5s 표시 후 소멸 (TDD §2·§5). Phase 1의 무표시 idle을 대체 |
 | 2.5 | HUD 확장: raw 표시 → 스트리밍 렌더 → ready + 힌트 바 → error(1.5s) | 2.4 | 4줄 제한, 화면 위치 |
-| 2.6 | Tab/Esc 인터셉트 (HUD 표시 중에만 소비) | 1.2, 2.4 | 다른 앱 키 입력 오염 금지 검증 |
-| 2.7 | 자동 주입 타이머 N (기본 1.0s, 디버그 메뉴에서 조절) | 2.4 | 도그푸딩으로 N 확정 → PRD §10-3 해소 |
+| 2.5b | HUD 리디자인: 우상단 앵커, 오브↔카드 스프링 모핑, Siri풍 비주얼(그라데이션 글로우·머티리얼), 메뉴바 아이콘 상태 연동 | 2.5 | TDD §3.8 개정판(2026-07-12) 기준. non-activating·key window 금지·클릭 통과 불변 재검증 필수. 완료 기준: 모핑 중에도 대상 앱 포커스 유지 확인 |
+| 2.6 | Tab/Esc 인터셉트 (HUD 표시 중에만 소비) | 1.2, 2.4 | 다른 앱 키 입력 오염 금지 검증. **소비 게이트는 세션 상태(refining/awaitingInjection) 기준** — injected 유지 카드(5s, idle)는 HUD가 보여도 소비 금지. Tab(원문 주입) 시 injected 카드 라벨 구분(2.5b 리뷰 N4) |
+| 2.7 | 자동 주입 타이머 N (현행 1.5s — 2.5b 도그푸딩 조정, 디버그 메뉴에서 조절) | 2.4 | 도그푸딩으로 N 확정 → PRD §10-3 해소 |
 | 2.8 | 사전 편집 UI (설정 창 내 테이블 CRUD) | 1.6 | |
 | 2.9 | 타이밍 계측 + 디버그 메뉴 (최근 20세션 p50/p90) | 2.4 | TDD §6 |
 | 2.10 | 골든 테스트: Phase 0 오디오 30개 파이프라인 자동 회귀 | 2.4 | CI 없이 로컬 스크립트로 시작 |
@@ -80,7 +81,7 @@
 | 3.2 | ModelManager 완성: 다운로드·진행률·sha256·이어받기·재다운로드 | |
 | 3.3 | 설정 화면: 핫키 변경, 입력 장치, 주입 방식, 타임아웃, N, 모델 관리 | |
 | 3.4 | UnicodeEventInjector (옵션 주입 방식) | |
-| 3.5 | 앱 아이콘·메뉴바 아이콘·이름 표기 확정 (PRD §10-2 해소) | |
+| 3.5 | 앱 아이콘·메뉴바 아이콘·이름 표기 확정 (PRD §10-2 해소) | 상태 연동 동작은 2.5b에서 구현 완료 — 여기서는 자산 교체만 |
 | 3.6 | Developer ID 서명 + 공증 파이프라인 (`xcodebuild` + `notarytool` 스크립트화) | Apple Developer Program 가입 선행 |
 | 3.7 | Sparkle 자동 업데이트 + appcast 호스팅 | |
 | 3.8 | dmg 패키징 + GitHub Releases + Homebrew cask PR | |
