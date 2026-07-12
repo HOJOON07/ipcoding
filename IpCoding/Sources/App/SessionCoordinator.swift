@@ -66,6 +66,9 @@ final class SessionCoordinator {
 
     /// 메뉴바 아이콘 갱신 훅 (TDD §3.8: 코디네이터가 구동, 아이콘 쪽엔 상태 머신 없음).
     var menuBarUpdater: ((SessionState) -> Void)?
+    /// Tab/Esc 인터셉트 모드 지시 훅 (TDD §3.1, 태스크 2.6) — 코디네이터가 세션 상태에 맞춰
+    /// 지시한다. refining=Esc만, awaitingInjection=Esc·Tab, 그 외(injected 유지 카드 포함)=none.
+    var keyInterceptUpdater: ((KeyInterceptMode) -> Void)?
 
     /// 세대 토큰 — hotkeyDown이 미룬 엔진 start를, 그 사이 도착한 up/cancel이 무효화하는 데 쓴다.
     private var startGeneration = 0
@@ -334,6 +337,17 @@ final class SessionCoordinator {
         }
         updateHUD(for: next)
         menuBarUpdater?(next)
+        keyInterceptUpdater?(interceptMode(for: next))
+    }
+
+    /// 세션 상태 → keyDown 인터셉트 모드 (TDD §3.1). 소비 게이트는 세션 상태 기준 —
+    /// injected 유지 카드(idle)에선 절대 소비하지 않는다 (PLAN 2.6).
+    private func interceptMode(for state: SessionState) -> KeyInterceptMode {
+        switch state {
+        case .refining: return .escOnly
+        case .awaitingInjection: return .escAndTab
+        default: return .none
+        }
     }
 
     /// 세션 상태 → HUD 매핑 (TDD §3.8 상태별 뷰, 2.5).

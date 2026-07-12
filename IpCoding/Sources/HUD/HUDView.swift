@@ -266,19 +266,27 @@ private struct KeycapChip: View {
 }
 
 /// 주입 후 결과 유지 카드: 원문·교정 병기 + ✓ 주입 완료 (5s 유지 — 도그푸딩 2026-07-12).
+/// Tab으로 원문을 주입한 경우(raw == text)엔 "원문" 단일 행 — 교정본 주입으로 오인 방지.
 private struct InjectedCardView: View {
     let raw: String
     let text: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
-                RowLabel(text: "원문")
-                SessionText(text: raw, dimmed: true)
-            }
-            HStack(alignment: .top, spacing: 8) {
-                RowLabel(text: "교정", accent: true)
-                SessionText(text: text)
+            if raw == text {
+                HStack(alignment: .top, spacing: 8) {
+                    RowLabel(text: "원문", accent: true)
+                    SessionText(text: text)
+                }
+            } else {
+                HStack(alignment: .top, spacing: 8) {
+                    RowLabel(text: "원문")
+                    SessionText(text: raw, dimmed: true)
+                }
+                HStack(alignment: .top, spacing: 8) {
+                    RowLabel(text: "교정", accent: true)
+                    SessionText(text: text)
+                }
             }
             HStack(spacing: 5) {
                 Image(systemName: "checkmark.circle.fill")

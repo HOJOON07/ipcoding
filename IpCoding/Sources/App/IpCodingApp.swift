@@ -148,6 +148,10 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
     private func startInput() {
         hotkeyManager.delegate = self
         audioCapture.delegate = self
+        // Tab/Esc 인터셉트 모드: 코디네이터 지시 → HotkeyManager (태스크 2.6, 단방향).
+        coordinator.keyInterceptUpdater = { [weak self] mode in
+            self?.hotkeyManager.interceptMode = mode
+        }
         if !hotkeyManager.start() {
             _ = HotkeyManager.promptForAccessibilityIfNeeded()
             logger.warning("손쉬운 사용 권한 미부여 — 시스템 설정에서 부여 후 앱 재시작 필요")
@@ -176,6 +180,14 @@ extension IpCodingApp: HotkeyManagerDelegate {
 
     func hotkeyCancelled() {
         coordinator.hotkeyCancelled()
+    }
+
+    func escKeyPressed() {
+        coordinator.escPressed()
+    }
+
+    func tabKeyPressed() {
+        coordinator.tabPressed()
     }
 }
 
