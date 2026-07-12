@@ -26,9 +26,15 @@ private final class RefineProgress: @unchecked Sendable {
 
     init() { startedAt = clock.now }
 
-    func markToken() {
+    private var accumulated = ""
+
+    /// 토큰을 누적하고 전체 스냅샷을 반환 (첫 토큰 마킹 겸용). HUD에는 스냅샷을 통째로 전달해
+    /// 개별 Task 홉의 실행 순서 비보장(토큰 A,B가 B,A로 도착) 문제를 원천 제거한다 (2.5 리뷰 W2).
+    func appendToken(_ token: String) -> String {
         lock.lock(); defer { lock.unlock() }
         firstTokenSeen = true
+        accumulated += token
+        return accumulated
     }
 
     func requestEsc() {
@@ -221,7 +227,7 @@ final class SessionCoordinator {
         hud.flashError("인식하지 못했어요", duration: .milliseconds(1500))
     }
 
-    /// sttDone(raw) → refining (TDD §2). LLM 미준비면 곧장 원문으로 awaitingInjection (원칙 3).
+    /// sttDone(raw) → refining: 원문 dim 표시 + 스트리밍 시작 (TDD §2 HUD.show(.raw)).
     private func sttDone(_ text: String) {
         guard state == .transcribing else { return }
         rawText = text
@@ -232,7 +238,7 @@ final class SessionCoordinator {
     private func runRefine(_ raw: String) async {
         guard await refineEngine.isLoaded else {
             logger.warning("[refine] 엔진 미준비 — 원문 폴백 (원칙 3)")
-            enterAwaitingInjection(with: raw)
+            enterAwaitingInjection(with: raw, usedFallback: true)
             return
         }
 
@@ -241,7 +247,11 @@ final class SessionCoordinator {
         do {
             let refined = try await refineEngine.refine(
                 rawText: raw,
-                onToken: { _ in progress.markToken() },  // 스트리밍 HUD 렌더는 2.5
+                onToken: { [weak self] token in
+                    // 스트리밍 렌더 (TDD §2 token(t) → HUD.append) — 누적 스냅샷을 MainActor로 홉.
+                    let snapshot = progress.appendToken(token)
+                    Task { @MainActor in self?.hud.setStreamedText(snapshot) }
+                },
                 isCancelled: { progress.shouldCancel() }
             )
             refineProgress = nil
@@ -249,7 +259,7 @@ final class SessionCoordinator {
             // 빈 교정은 원문 폴백 (원칙 3 — 말이 증발하지 않는다).
             let result = refined.isEmpty ? raw : refined
             logger.info("[refine] 완료 — \(result.count, privacy: .public)자")
-            enterAwaitingInjection(with: result)
+            enterAwaitingInjection(with: result, usedFallback: refined.isEmpty)
         } catch RefineError.cancelled {
             refineProgress = nil
             if progress.escRequested {
@@ -257,23 +267,24 @@ final class SessionCoordinator {
                 logger.info("[refine] Esc 취소 완료")
                 if state == .refining { transition(to: .idle) }
             } else {
-                // llmTimeout → 원문 폴백 후 정상 흐름 계속 (TDD §2/§5, 원칙 3). "원문 사용" 배지는 2.5.
+                // llmTimeout → 원문 폴백 후 정상 흐름 계속 (TDD §2/§5, 원칙 3) + "원문 사용" 배지.
                 logger.warning("[refine] llmTimeout — 원문 폴백")
-                enterAwaitingInjection(with: raw)
+                enterAwaitingInjection(with: raw, usedFallback: true)
             }
         } catch {
             refineProgress = nil
-            // llmError → 원문 폴백 (TDD §2/§5, 원칙 3).
+            // llmError → 원문 폴백 (TDD §2/§5, 원칙 3) + "원문 사용" 배지.
             logger.error("[refine] llmError — 원문 폴백: \(String(describing: error), privacy: .public)")
-            enterAwaitingInjection(with: raw)
+            enterAwaitingInjection(with: raw, usedFallback: true)
         }
     }
 
-    /// refining → awaitingInjection: N초 타이머 시작 (TDD §2). ready HUD·힌트 바는 2.5.
-    private func enterAwaitingInjection(with text: String) {
+    /// refining → awaitingInjection: ready HUD(힌트 바, 폴백 배지) + N초 타이머 시작 (TDD §2).
+    private func enterAwaitingInjection(with text: String, usedFallback: Bool) {
         guard state == .refining else { return }  // 전이표에 있는 진입 경로는 refining뿐
         refinedText = text
         transition(to: .awaitingInjection)
+        hud.update(.ready(text: text, usedFallback: usedFallback))
         injectionTimer = Task { @MainActor in
             try? await Task.sleep(for: autoInjectDelay)
             guard !Task.isCancelled else { return }
@@ -312,14 +323,22 @@ final class SessionCoordinator {
         updateHUD(for: next)
     }
 
-    /// 세션 상태 → HUD 매핑. raw 표시·스트리밍 렌더·ready 힌트 바는 2.5에서 확장 —
-    /// 2.4는 refining/awaitingInjection도 스피너로 표시한다.
+    /// 세션 상태 → HUD 매핑 (TDD §3.8 상태별 뷰, 2.5).
     private func updateHUD(for state: SessionState) {
         switch state {
-        case .idle:        hud.update(.hidden)
-        case .recording:   hud.update(.recording)
-        case .transcribing, .refining, .awaitingInjection, .injecting:
+        case .idle:
+            hud.update(.hidden)
+        case .recording:
+            hud.update(.recording)
+        case .transcribing:
             hud.update(.processing)
+        case .refining:
+            // 원문 dim + 스트리밍 텍스트 (PRD §4 ③). 토큰은 appendStreamToken으로 쌓임.
+            hud.update(.refining(raw: rawText ?? "", streamed: ""))
+        case .awaitingInjection:
+            break  // enterAwaitingInjection이 .ready(폴백 배지 포함)를 직접 설정
+        case .injecting:
+            break  // 주입(수백 ms) 동안 ready 표시 유지 — idle 전이에서 소멸 (TDD §2 done→소멸)
         }
     }
 }

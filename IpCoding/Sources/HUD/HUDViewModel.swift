@@ -1,11 +1,16 @@
 import SwiftUI
 
-/// HUD 표시 상태. raw 표시·스트리밍 렌더·ready 힌트 바는 태스크 2.5에서 확장.
+/// HUD 표시 상태 (TDD §3.8 상태별 뷰 — 태스크 2.5 확장).
 enum HUDState: Equatable {
     case hidden
     case recording
+    /// 전사 중 스피너.
     case processing
-    /// 짧은 에러 배지 (예: sttFailed "인식하지 못했어요" 1.5s — TDD §5, 태스크 2.4).
+    /// 교정 중: 원문 dim + 스트리밍 텍스트가 타자 치듯 쌓임 (PRD §4 ③).
+    case refining(raw: String, streamed: String)
+    /// 완성 텍스트 + 힌트 바. usedFallback이면 "원문 사용" 배지 (llmTimeout/Error — TDD §2).
+    case ready(text: String, usedFallback: Bool)
+    /// 짧은 에러 배지 (예: sttFailed "인식하지 못했어요" 1.5s — TDD §5).
     case error(String)
 }
 
@@ -18,6 +23,8 @@ final class HUDViewModel: ObservableObject {
 
     /// 마이크 레벨(0~1) 공급자. 코디네이터가 AudioCapture.currentLevel로 연결한다.
     var levelProvider: (() -> Float)?
+    /// 콘텐츠 크기 변경 통지 — HUDController가 패널 크기·위치를 갱신한다 (동적 크기, 2.5).
+    var onContentSizeChange: ((CGSize) -> Void)?
 
     private var levelTimer: Timer?
 
@@ -28,6 +35,15 @@ final class HUDViewModel: ObservableObject {
         } else {
             stopLevelPolling()
             level = 0
+        }
+    }
+
+    /// refining 중 스트리밍 텍스트 갱신 (TDD §2 token(t) → HUD.append). 누적 스냅샷을 받아
+    /// 더 긴 것만 반영 — Task 홉 순서가 뒤바뀌어도 표시가 뒤로 가지 않는다. refining이 아니면
+    /// 무시(늦은 스냅샷이 ready/hidden을 오염시키지 않음).
+    func setStreamedText(_ full: String) {
+        if case .refining(let raw, let current) = state, full.count > current.count {
+            state = .refining(raw: raw, streamed: full)
         }
     }
 
