@@ -55,6 +55,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "입코딩 v0.1 (Phase 2)", action: nil, keyEquivalent: ""))
         menu.addItem(.separator())
         menu.addItem(makeInjectDelayMenuItem())
+        menu.addItem(makeStatsMenuItem())
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(
             title: "종료",
@@ -106,6 +107,53 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         coordinator.autoInjectDelay = .milliseconds(ms)
         sender.menu?.items.forEach { $0.state = ($0 === sender) ? .on : .off }
         logger.info("자동 주입 대기 변경 — \(ms, privacy: .public)ms")
+    }
+
+    // MARK: - 타이밍 통계 디버그 메뉴 (태스크 2.9, TDD §6)
+
+    private func makeStatsMenuItem() -> NSMenuItem {
+        let root = NSMenuItem(title: "타이밍 통계", action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        submenu.delegate = self  // 열 때마다 최신 통계로 재구성
+        root.submenu = submenu
+        return root
+    }
+
+    /// 통계 서브메뉴를 현재 값으로 재구성 (표시 전용 — 항목 비활성).
+    private func rebuildStatsMenu(_ menu: NSMenu) {
+        menu.removeAllItems()
+        let store = coordinator.metrics
+
+        func row(_ title: String) {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
+        }
+
+        guard !store.recent.isEmpty else {
+            row("아직 완료된 세션이 없습니다")
+            return
+        }
+
+        func statLine(_ label: String, _ keyPath: KeyPath<SessionMetrics, Duration?>) {
+            let p50 = store.percentile(0.5, of: keyPath)?.displaySeconds ?? "–"
+            let p90 = store.percentile(0.9, of: keyPath)?.displaySeconds ?? "–"
+            row("\(label)  p50 \(p50) · p90 \(p90)")
+        }
+
+        row("최근 \(store.recent.count)세션 (메모리)")
+        menu.addItem(.separator())
+        statLine("전사 T_raw", \.tRaw)
+        statLine("첫 토큰", \.tFirstToken)
+        statLine("교정 완성 T_ready", \.tReady)
+        statLine("주입 T_inject", \.tInject)
+        menu.addItem(.separator())
+        let fallbacks = store.recent.filter(\.usedFallback).count
+        row("원문 폴백 \(fallbacks)/\(store.recent.count)")
+        if let rate = store.escCancelRate {
+            row(String(format: "Esc 취소율 %.0f%% (%d/%d)", rate * 100,
+                       store.escCancelCount, store.completedCount + store.escCancelCount))
+        }
     }
 
     /// 상태별 메뉴바 아이콘: idle 마이크(템플릿) / 녹음 빨간 마이크+펄스 / 처리 웨이브폼.
@@ -238,5 +286,13 @@ extension IpCodingApp: HotkeyManagerDelegate {
 extension IpCodingApp: AudioCaptureDelegate {
     func audioCaptureDidReachMaxDuration() {
         coordinator.audioReachedMaxDuration()
+    }
+}
+
+// MARK: - NSMenuDelegate (타이밍 통계 서브메뉴 갱신)
+
+extension IpCodingApp: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        rebuildStatsMenu(menu)
     }
 }

@@ -86,6 +86,12 @@ final class SessionCoordinator {
     /// UserDefaults/메뉴에서 설정한다 (태스크 2.7). 0 = 즉시 주입 (Tab/Esc 창 사실상 없음).
     var autoInjectDelay: Duration = .milliseconds(500)
 
+    // 타이밍 계측 (TDD §6, 태스크 2.9). T0 = hotkeyUp, 메모리에만 보관.
+    let metrics = MetricsStore()
+    private let metricsClock = ContinuousClock()
+    private var sessionT0: ContinuousClock.Instant?
+    private var currentMetrics = SessionMetrics()
+
     private let audioCapture: AudioCapture
     private let transcribeEngine: TranscribeEngine
     private let refineEngine: RefineEngine
@@ -168,9 +174,11 @@ final class SessionCoordinator {
             // 즉시 idle 전이 — refine Task가 서스펜션 구간(isLoaded await 등)에 있어도 Esc가
             // 유실되지 않는다(잔여 Task는 상태 가드로 무력화). LLM 생성 자체는 requestEsc로 중단.
             refineProgress?.requestEsc()
+            metrics.recordEscCancel()  // Esc 취소율 (Phase 2 완료 기준 — 측정 시작)
             transition(to: .idle)
         case .awaitingInjection:
             injectionTimer?.cancel()
+            metrics.recordEscCancel()
             transition(to: .idle)
         default:
             break
@@ -189,8 +197,16 @@ final class SessionCoordinator {
 
     private func finishRecording() {
         let samples = audioCapture.stop()
+        sessionT0 = metricsClock.now  // T0 = 녹음 종료(핫키 릴리즈/60s 마감) — TDD §6
+        currentMetrics = SessionMetrics()
         transition(to: .transcribing)
         Task { await runTranscribe(samples) }
+    }
+
+    /// T0 기준 경과 시간 (세션 밖이면 nil).
+    private func elapsedSinceT0() -> Duration? {
+        guard let t0 = sessionT0 else { return nil }
+        return metricsClock.now - t0
     }
 
     /// 무음 판정 에너지 문턱 (RMS). 1.3 실측에서 발화 RMS ≈ 0.0097 — 그 1/5 수준의 잠정값.
@@ -234,10 +250,11 @@ final class SessionCoordinator {
         hud.flashError("인식하지 못했어요", duration: .milliseconds(1500))
     }
 
-    /// sttDone(raw) → refining: 원문 dim 표시 + 스트리밍 시작 (TDD §2 HUD.show(.raw)).
+    /// sttDone(raw) → refining: 원문 dim 표시 + 스트리밍 시작 (TDD §2).
     private func sttDone(_ text: String) {
         guard state == .transcribing else { return }
         rawText = text
+        currentMetrics.tRaw = elapsedSinceT0()  // T_raw (TDD §6)
         transition(to: .refining)
         Task { await runRefine(text) }
     }
@@ -257,7 +274,13 @@ final class SessionCoordinator {
                 onToken: { [weak self] token in
                     // 스트리밍 렌더 (TDD §2 token(t) → HUD.append) — 누적 스냅샷을 MainActor로 홉.
                     let snapshot = progress.appendToken(token)
-                    Task { @MainActor in self?.hud.setStreamedText(snapshot) }
+                    Task { @MainActor in
+                        guard let self else { return }
+                        if self.currentMetrics.tFirstToken == nil {
+                            self.currentMetrics.tFirstToken = self.elapsedSinceT0()  // T_first_token
+                        }
+                        self.hud.setStreamedText(snapshot)
+                    }
                 },
                 isCancelled: { progress.shouldCancel() }
             )
@@ -289,6 +312,8 @@ final class SessionCoordinator {
     /// refining → awaitingInjection: ready HUD(힌트 바, 폴백 배지) + N초 타이머 시작 (TDD §2).
     private func enterAwaitingInjection(with text: String, usedFallback: Bool) {
         guard state == .refining else { return }  // 전이표에 있는 진입 경로는 refining뿐
+        currentMetrics.tReady = elapsedSinceT0()  // T_ready (TDD §6, 폴백 포함)
+        currentMetrics.usedFallback = usedFallback
         refinedText = text
         transition(to: .awaitingInjection)
         hud.update(.ready(raw: rawText ?? text, text: text, usedFallback: usedFallback))
@@ -313,6 +338,10 @@ final class SessionCoordinator {
         } catch {
             // 주입 실패 시 HUD 결과 유지 + 복사 버튼은 TDD §5 — HUD 확장(2.5+) 몫. 지금은 로그만.
             logger.error("[inject] 주입 실패: \(String(describing: error), privacy: .public)")
+        }
+        if injected {
+            currentMetrics.tInject = elapsedSinceT0()  // T_inject (TDD §6)
+            metrics.recordCompleted(currentMetrics)
         }
         transition(to: .idle)
         if injected {
