@@ -21,6 +21,8 @@ final class MetricsStore {
     private(set) var completedCount = 0
     /// Esc로 취소된 세션 수 (refining·awaitingInjection 중 취소, 누적).
     private(set) var escCancelCount = 0
+    /// Tab으로 원문을 선택한 세션 수 (교정 결과 거부 지표, 누적).
+    private(set) var tabRawCount = 0
 
     func recordCompleted(_ metrics: SessionMetrics) {
         recent.append(metrics)
@@ -30,6 +32,10 @@ final class MetricsStore {
 
     func recordEscCancel() {
         escCancelCount += 1
+    }
+
+    func recordTabRaw() {
+        tabRawCount += 1
     }
 
     /// Esc 취소율 = 취소 / (완료 + 취소). 세션이 없으면 nil.

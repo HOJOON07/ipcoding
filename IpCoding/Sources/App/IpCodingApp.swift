@@ -111,11 +111,15 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
 
     // MARK: - 타이밍 통계 디버그 메뉴 (태스크 2.9, TDD §6)
 
+    private var statsSubmenu: NSMenu?
+
     private func makeStatsMenuItem() -> NSMenuItem {
         let root = NSMenuItem(title: "타이밍 통계", action: nil, keyEquivalent: "")
         let submenu = NSMenu()
         submenu.delegate = self  // 열 때마다 최신 통계로 재구성
+        submenu.autoenablesItems = false  // 표시 전용 항목의 비활성을 명시적으로 (리뷰 N5)
         root.submenu = submenu
+        statsSubmenu = submenu
         return root
     }
 
@@ -154,6 +158,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
             row(String(format: "Esc 취소율 %.0f%% (%d/%d)", rate * 100,
                        store.escCancelCount, store.completedCount + store.escCancelCount))
         }
+        row("Tab 원문 사용 \(store.tabRawCount)회")
     }
 
     /// 상태별 메뉴바 아이콘: idle 마이크(템플릿) / 녹음 빨간 마이크+펄스 / 처리 웨이브폼.
@@ -293,6 +298,7 @@ extension IpCodingApp: AudioCaptureDelegate {
 
 extension IpCodingApp: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === statsSubmenu else { return }  // 다른 메뉴 오염 방지 (리뷰 N4)
         rebuildStatsMenu(menu)
     }
 }

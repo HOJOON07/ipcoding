@@ -189,6 +189,7 @@ final class SessionCoordinator {
     /// 키 인터셉트 배선은 태스크 2.6.
     func tabPressed() {
         guard state == .awaitingInjection, let raw = rawText else { return }
+        metrics.recordTabRaw()  // 교정 거부(원문 선택) 지표 — 리뷰 N6
         injectionTimer?.cancel()
         Task { await performInjection(raw) }
     }
@@ -196,9 +197,9 @@ final class SessionCoordinator {
     // MARK: - 파이프라인: transcribing → refining → awaitingInjection → injecting
 
     private func finishRecording() {
-        let samples = audioCapture.stop()
-        sessionT0 = metricsClock.now  // T0 = 녹음 종료(핫키 릴리즈/60s 마감) — TDD §6
+        sessionT0 = metricsClock.now  // T0 = hotkeyUp/60s 마감 — stop() 비용 포함 측정 (TDD §6, 리뷰 W1)
         currentMetrics = SessionMetrics()
+        let samples = audioCapture.stop()
         transition(to: .transcribing)
         Task { await runTranscribe(samples) }
     }
@@ -274,10 +275,15 @@ final class SessionCoordinator {
                 onToken: { [weak self] token in
                     // 스트리밍 렌더 (TDD §2 token(t) → HUD.append) — 누적 스냅샷을 MainActor로 홉.
                     let snapshot = progress.appendToken(token)
+                    // 토큰 도착 시각은 콜백 스레드에서 캡처 (홉 지연 배제 — 리뷰 N3).
+                    let tokenInstant = ContinuousClock().now
                     Task { @MainActor in
-                        guard let self else { return }
-                        if self.currentMetrics.tFirstToken == nil {
-                            self.currentMetrics.tFirstToken = self.elapsedSinceT0()  // T_first_token
+                        // 세션 가드 — 취소된 이전 refine의 지연 토큰이 새 세션 계측·HUD를
+                        // 오염시키지 않는다 (리뷰 W2).
+                        guard let self, self.state == .refining,
+                              self.refineProgress === progress else { return }
+                        if self.currentMetrics.tFirstToken == nil, let t0 = self.sessionT0 {
+                            self.currentMetrics.tFirstToken = tokenInstant - t0  // T_first_token
                         }
                         self.hud.setStreamedText(snapshot)
                     }
@@ -363,6 +369,7 @@ final class SessionCoordinator {
             refineProgress = nil
             injectionTimer?.cancel()
             injectionTimer = nil
+            sessionT0 = nil  // 계측 세션 경계 (elapsedSinceT0의 "세션 밖 nil" 계약)
         }
         updateHUD(for: next)
         menuBarUpdater?(next)
