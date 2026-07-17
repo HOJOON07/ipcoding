@@ -16,3 +16,6 @@ IpCoding/Vendor/
 DerivedData/
 *.xcuserstate
 xcuserdata/
+
+# 릴리스 패키징 산출물 (scripts/release.sh)
+build/
