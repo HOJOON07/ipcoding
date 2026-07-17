@@ -86,7 +86,7 @@ IpCoding/
 - ⌘+Fn 감지: `flags.contains(.maskCommand) && flags.contains(.maskSecondaryFn)` 가 **false→true** 전이 시 `hotkeyDown`, 둘 중 하나라도 빠지면 `hotkeyUp`.
 - 디바운스: down 후 200ms 미만의 up은 hotkeyUp 대신 `hotkeyCancelled` 이벤트로 발행한다 (실수 방지). 취소 전이 자체는 코디네이터가 수행한다(§2).
 - 세션 상태에 따라 `keyDown`도 검사(코디네이터가 인터셉트 모드 지시 — §2 전이표 기준): refining 중 Esc(53), awaitingInjection 중 Esc(53)·Tab(48)을 **nil 반환으로 소비**(대상 앱에 전달 금지). ⌘·⌃·⌥ 조합은 통과(앱 전환 등 시스템 단축키 보호). 그 외 키는 통과. injected 유지 카드(idle) 중에는 소비하지 않는다.
-- 권한: 이벤트 탭은 손쉬운 사용(Accessibility) 또는 입력 모니터링 권한 필요. 탭 생성 실패 시 온보딩으로 유도.
+- 권한: 소비형(.defaultTap) 이벤트 탭의 키 이벤트 수신은 손쉬운 사용(Accessibility)으로 게이트된다(입력 모니터링은 listen-only 탭 전용 — §4). 탭 생성 실패 시 온보딩으로 유도.
 - 주의: 이벤트 탭은 타임아웃으로 비활성화될 수 있음(`kCGEventTapDisabledByTimeout`) — 콜백에서 감지해 즉시 재활성화.
 
 ### 3.2 AudioCapture
@@ -193,8 +193,9 @@ protocol Injecting { func inject(_ text: String) async throws }
 | 권한 | 필요한 모듈 | 요청 시점 | 미허용 시 동작 |
 |---|---|---|---|
 | 마이크 | AudioCapture | 온보딩 1단계 | 녹음 불가 — 기능 정지 + 안내 |
-| 손쉬운 사용 (Accessibility) | Injector(CGEvent post) | 온보딩 2단계 | 주입 불가 — HUD에 결과만 표시 + 복사 버튼 폴백 |
-| 입력 모니터링 (Input Monitoring) | HotkeyManager(이벤트 탭) | 온보딩 3단계 | 핫키 불가 — 메뉴바 클릭 녹음으로 폴백 |
+| 손쉬운 사용 (Accessibility) | HotkeyManager(이벤트 탭)·Injector(CGEvent post) | 온보딩 2단계 | 핫키·주입 모두 불가 — 메뉴바 클릭 녹음으로 폴백, HUD에 결과 표시 + 복사 버튼 폴백 |
+
+입력 모니터링(Input Monitoring)은 불필요 — listen-only 탭(kCGEventTapOptionListenOnly) 전용 게이트이며, 현 설계의 소비형 탭(.defaultTap)과 CGEvent post는 모두 Accessibility로 게이트된다(SDK 15.5 CGEvent.h, DTS 707680/758554, 2026-07 조사). 수동 토글 시 앱 재시작을 요구해 온보딩 UX에도 부적합.
 
 각 단계는 "왜 필요한지 한 문장 + 시스템 설정 딥링크 버튼 + 허용 감지 시 자동 다음 단계" 패턴. 권한 상태는 앱 시작 시마다 재검사.
 

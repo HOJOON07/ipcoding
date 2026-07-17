@@ -90,7 +90,8 @@ final class HotkeyManager {
             callback: callback,
             userInfo: Unmanaged.passUnretained(self).toOpaque()
         ) else {
-            // tapCreate nil = 손쉬운 사용(또는 입력 모니터링) 권한 없음 (macos-quirks).
+            // tapCreate nil ≈ 손쉬운 사용 권한 없음 (소비형 탭은 Accessibility 게이트 — TDD §4).
+            // 정확히는 "요청 마스크 전부 제거됨"이라 권한 판정 정본은 AXIsProcessTrusted().
             state = .permissionDenied
             logger.error("이벤트 탭 생성 실패 — 손쉬운 사용 권한 필요")
             return false

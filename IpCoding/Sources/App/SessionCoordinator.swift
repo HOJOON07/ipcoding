@@ -139,6 +139,12 @@ final class SessionCoordinator {
             guard generation == self.startGeneration, self.state == .recording else { return }
             do {
                 try self.audioCapture.start()
+            } catch AudioCaptureError.microphoneNotAuthorized {
+                // TDD §4 "녹음 불가 — 기능 정지 + 안내": 온보딩을 건너뛴 사용자가 침묵 실패를
+                // 겪지 않도록 안내한다 (3.1 리뷰 W1). 온보딩 재진입은 메뉴바 "권한 설정…".
+                self.logger.error("캡처 시작 실패 — 마이크 권한 미부여")
+                self.transition(to: .idle)
+                self.hud.flashError("마이크 권한이 필요해요 — 메뉴바 > 권한 설정", duration: .milliseconds(2500))
             } catch {
                 self.logger.error("캡처 시작 실패: \(String(describing: error), privacy: .public)")
                 self.transition(to: .idle)

@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SwiftUI
 import os
 
@@ -58,6 +59,11 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         let dictItem = NSMenuItem(title: "사전 편집…", action: #selector(openDictionaryEditor), keyEquivalent: "")
         dictItem.target = self
         menu.addItem(dictItem)
+        // 온보딩 재진입점 (3.1 리뷰 N1) — 나중에 권한을 주려는 사용자의 유일한 경로가
+        // 앱 재시작이 되지 않도록. 권한이 이미 다 있으면 완료 화면으로 직행한다.
+        let permItem = NSMenuItem(title: "권한 설정…", action: #selector(openOnboardingFromMenu), keyEquivalent: "")
+        permItem.target = self
+        menu.addItem(permItem)
         menu.addItem(makeInjectDelayMenuItem())
         menu.addItem(makeStatsMenuItem())
         menu.addItem(.separator())
@@ -296,7 +302,9 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 이벤트 탭 + 마이크 권한. 핫키·오디오 이벤트는 코디네이터로 직접 전달된다(TDD §2).
+    /// 이벤트 탭 시작 + 권한 재검사. 핫키·오디오 이벤트는 코디네이터로 직접 전달된다(TDD §2).
+    /// 권한이 미충족이면 온보딩 창으로 유도 — 요청 다이얼로그는 온보딩 단계 버튼에서 띄운다
+    /// (TDD §4 요청 시점 = 온보딩 1·2단계. 시작 시 무맥락 다이얼로그 남발 금지).
     private func startInput() {
         hotkeyManager.delegate = self
         audioCapture.delegate = self
@@ -305,17 +313,60 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
             self?.hotkeyManager.interceptMode = mode
         }
         if !hotkeyManager.start() {
-            _ = HotkeyManager.promptForAccessibilityIfNeeded()
-            logger.warning("손쉬운 사용 권한 미부여 — 시스템 설정에서 부여 후 앱 재시작 필요")
+            logger.warning("이벤트 탭 시작 실패 — 손쉬운 사용 미부여, 온보딩으로 유도")
         }
+        // 권한 상태는 앱 시작 시마다 재검사한다 (TDD §4).
+        if AudioCapture.microphoneAuthorization != .authorized || !AXIsProcessTrusted() {
+            openOnboarding()
+        }
+    }
 
-        // 마이크 권한을 시작 시 선행 요청 (첫 발화 때 무음 방지). 온보딩은 태스크 3.1.
-        Task { @MainActor in
-            let granted = await AudioCapture.requestMicrophoneAccessIfNeeded()
-            if !granted {
-                self.logger.warning("마이크 권한 미부여(\(String(describing: AudioCapture.microphoneAuthorization.rawValue), privacy: .public)) — 시스템 설정 > 마이크에서 부여 필요")
-            }
+    // MARK: - 온보딩 창 (태스크 3.1, TDD §4)
+
+    private var onboardingWindow: NSWindow?
+
+    @objc private func openOnboardingFromMenu() {
+        openOnboarding()
+    }
+
+    /// 온보딩 창은 사전 편집 창과 달리 **재사용하지 않는다** — 닫히면 참조를 놓아 해제하고
+    /// (windowWillClose), 다음 열기에서 현재 권한 상태로 새로 만든다. 해제가 NSHostingView와
+    /// 뷰의 .task 폴링을 확정적으로 끝내므로 폴링 잔존·스테일 상태 문제가 없다 (3.1 리뷰 W2).
+    private func openOnboarding() {
+        if let window = onboardingWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
         }
+        let view = OnboardingView(
+            onAccessibilityGranted: { [weak self] in
+                guard let self else { return }
+                // 부여 전에 만든(또는 실패한) 탭은 부여만으로 살아나지 않는다 — 재생성 필수.
+                self.hotkeyManager.stop()
+                if self.hotkeyManager.start() {
+                    self.logger.info("손쉬운 사용 부여 감지 — 이벤트 탭 재생성 완료")
+                } else {
+                    self.logger.warning("부여 감지 후에도 탭 재생성 실패 — 앱 재시작 필요할 수 있음")
+                }
+            },
+            onFinished: { [weak self] in
+                self?.onboardingWindow?.close()
+            }
+        )
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 400),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "입코딩 시작하기"
+        window.contentView = NSHostingView(rootView: view)
+        window.isReleasedWhenClosed = false  // 해제는 windowWillClose에서 참조 해제로 관리
+        window.delegate = self
+        window.center()
+        onboardingWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 }
 
@@ -346,6 +397,15 @@ extension IpCodingApp: HotkeyManagerDelegate {
 extension IpCodingApp: AudioCaptureDelegate {
     func audioCaptureDidReachMaxDuration() {
         coordinator.audioReachedMaxDuration()
+    }
+}
+
+// MARK: - NSWindowDelegate (온보딩 창 해제 — 3.1 리뷰 W2)
+
+extension IpCodingApp: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === onboardingWindow else { return }
+        onboardingWindow = nil  // 참조 해제 → NSHostingView·뷰 .task 폴링이 확정적으로 종료
     }
 }
 
