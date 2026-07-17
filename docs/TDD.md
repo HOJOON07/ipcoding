@@ -83,7 +83,7 @@ IpCoding/
 ### 3.1 HotkeyManager
 
 - `CGEvent.tapCreate`로 `flagsChanged` 이벤트 탭 생성 (listen-only 아님 — HUD 표시 중 Tab/Esc 소비를 위해 `.defaultTap`).
-- ⌘+Fn 감지: `flags.contains(.maskCommand) && flags.contains(.maskSecondaryFn)` 가 **false→true** 전이 시 `hotkeyDown`, 둘 중 하나라도 빠지면 `hotkeyUp`.
+- 핫키 감지: 요구 플래그 집합이 모두 눌린 상태의 **false→true** 전이 시 `hotkeyDown`, 하나라도 빠지면 `hotkeyUp`. 조합은 수정자 프리셋으로 설정 가능(3.3, 2026-07-17 승인): 기본 ⌘+Fn, 대안 ⌥+Fn / ⌃+Fn. Fn 단독은 시스템 받아쓰기 키 충돌로 제외, 임의 키 조합은 v1.x 검토(keyDown 감지·녹음 UI 필요).
 - 디바운스: down 후 200ms 미만의 up은 hotkeyUp 대신 `hotkeyCancelled` 이벤트로 발행한다 (실수 방지). 취소 전이 자체는 코디네이터가 수행한다(§2).
 - 세션 상태에 따라 `keyDown`도 검사(코디네이터가 인터셉트 모드 지시 — §2 전이표 기준): refining 중 Esc(53), awaitingInjection 중 Esc(53)·Tab(48)을 **nil 반환으로 소비**(대상 앱에 전달 금지). ⌘·⌃·⌥ 조합은 통과(앱 전환 등 시스템 단축키 보호). 그 외 키는 통과. injected 유지 카드(idle) 중에는 소비하지 않는다.
 - 권한: 소비형(.defaultTap) 이벤트 탭의 키 이벤트 수신은 손쉬운 사용(Accessibility)으로 게이트된다(입력 모니터링은 listen-only 탭 전용 — §4). 탭 생성 실패 시 온보딩으로 유도.
@@ -94,7 +94,7 @@ IpCoding/
 - `AVAudioEngine` + `inputNode.installTap` (버퍼 4096 프레임, 입력 네이티브 포맷).
 - `AVAudioConverter`로 16kHz / mono / Float32 변환하여 세션 버퍼(`[Float]`)에 append.
 - 시작/정지는 코디네이터가 호출. 정지 시점의 버퍼를 통째로 반환(스트리밍 아님, PRD §4).
-- 장치: 기본은 시스템 기본 입력. 설정에서 고정 장치 선택 시 `kAudioOutputUnitProperty_CurrentDevice`로 지정.
+- 장치: 기본은 시스템 기본 입력. 설정에서 고정 장치 선택 시 UID로 저장하고 세션 시작마다 AudioDeviceID로 해석해 `inputNode.auAudioUnit.setDeviceID`(= kAudioOutputUnitProperty_CurrentDevice의 공식 브리지)로 지정 — 엔진 생성 직후·탭 설치 전에만. 장치 부재·실패는 시스템 기본 폴백(세션 실패 아님). (구현 3.3, 2026-07 조사)
 - 상한: 60초에서 강제 마감(메모리·지연 폭주 방지). 무음 입력이어도 정상 흐름 유지(빈 전사 → sttFailed 처리).
 - 엔진은 세션마다 start/stop (상시 가동 금지 — 마이크 표시등·HFP 전환은 발화 중에만).
 - 코디네이터는 엔진 start를 이벤트 탭 콜백에서 동기 실행하지 않고 Task로 미룬다(콜백 블로킹→탭 타임아웃 방지, HotkeyManager 계약). start는 동기 블로킹이며 BT HFP 전환 시 메인을 수백 ms 막을 수 있음 — 내장 마이크는 예산 내라 현재는 미룸만으로 충분. BT 스톨을 없애려면 start를 off-main executor로 분리해야 하며, 실측(타깃 하드웨어 BT start 지연) 후 필요 시 도입한다.

@@ -34,6 +34,8 @@ enum ModelManagerError: Error {
     case diskWriteFailed
     /// sha256(또는 초과 크기) 불일치 — 파일 폐기됨, 재다운로드 필요 (TDD §3.9).
     case checksumMismatch(spec: ModelSpec)
+    /// 다른 다운로드가 진행 중 — 전역 직렬화 (같은 .partial 동시 쓰기 차단, 3.3 리뷰 W1).
+    case anotherDownloadActive
 }
 
 /// 모델 파일의 경로 해석·존재 확인 (TDD §3.9의 Phase 1 최소 구현).
@@ -107,9 +109,45 @@ final class ModelManager {
         Self.requiredModels.allSatisfy { isInstalled($0) }
     }
 
+    /// 진행 중인 다운로드의 spec.id — 앱 전역에 동시 다운로드 1개만 허용 (3.3 리뷰 W1:
+    /// 설정 재다운로드와 온보딩이 같은 .partial에 동시 append하는 사고 차단).
+    private(set) var activeDownloadId: String?
+
     /// 다운로드 + sha256 검증 (태스크 3.2, TDD §3.9). 이미 설치돼 있으면 즉시 반환.
     /// 취소·실패 시 partial이 보존되어 재시도에서 이어받는다. 진행 콜백은 MainActor로 홉.
+    /// 다른 다운로드가 진행 중이면 anotherDownloadActive — 호출측은 안내 후 재시도 유도.
     func download(
+        _ spec: ModelSpec,
+        onProgress: @escaping @MainActor @Sendable (DownloadProgress) -> Void
+    ) async throws {
+        try beginExclusiveDownload(of: spec)
+        defer { activeDownloadId = nil }
+        try await performDownload(spec, onProgress: onProgress)
+    }
+
+    /// 손상 파일 재다운로드 (TDD §3.9 "로드 실패/파일 손상 시 재다운로드 유도"):
+    /// 기존 파일·partial을 지우고 처음부터 받는다. 삭제는 배타성 확보 후에만 —
+    /// 진행 중인 다운로드의 partial을 지우는 사고 방지.
+    func redownload(
+        _ spec: ModelSpec,
+        onProgress: @escaping @MainActor @Sendable (DownloadProgress) -> Void
+    ) async throws {
+        try beginExclusiveDownload(of: spec)
+        defer { activeDownloadId = nil }
+        let fm = FileManager.default
+        try? fm.removeItem(at: modelsDirectory.appendingPathComponent(spec.filename))
+        try? fm.removeItem(at: modelsDirectory.appendingPathComponent(spec.filename + ".partial"))
+        try await performDownload(spec, onProgress: onProgress)
+    }
+
+    private func beginExclusiveDownload(of spec: ModelSpec) throws {
+        guard activeDownloadId == nil else {
+            throw ModelManagerError.anotherDownloadActive
+        }
+        activeDownloadId = spec.id
+    }
+
+    private func performDownload(
         _ spec: ModelSpec,
         onProgress: @escaping @MainActor @Sendable (DownloadProgress) -> Void
     ) async throws {
@@ -119,17 +157,5 @@ final class ModelManager {
             Task { @MainActor in onProgress(progress) }
         }
         logger.info("모델 다운로드·검증 완료: \(spec.id, privacy: .public)")
-    }
-
-    /// 손상 파일 재다운로드 (TDD §3.9 "로드 실패/파일 손상 시 재다운로드 유도"):
-    /// 기존 파일·partial을 지우고 처음부터 받는다.
-    func redownload(
-        _ spec: ModelSpec,
-        onProgress: @escaping @MainActor @Sendable (DownloadProgress) -> Void
-    ) async throws {
-        let fm = FileManager.default
-        try? fm.removeItem(at: modelsDirectory.appendingPathComponent(spec.filename))
-        try? fm.removeItem(at: modelsDirectory.appendingPathComponent(spec.filename + ".partial"))
-        try await download(spec, onProgress: onProgress)
     }
 }

@@ -21,6 +21,30 @@ protocol HotkeyManagerDelegate: AnyObject {
     func tabKeyPressed()
 }
 
+/// 핫키 수정자 프리셋 (TDD §3.1, 태스크 3.3 — 2026-07-17 승인).
+/// flagsChanged 감지 구조를 공유하는 조합만 제공한다. Fn 단독은 시스템 받아쓰기 키 충돌로 제외.
+enum HotkeyCombo: String, CaseIterable {
+    case commandFn
+    case optionFn
+    case controlFn
+
+    var requiredFlags: CGEventFlags {
+        switch self {
+        case .commandFn: return [.maskCommand, .maskSecondaryFn]
+        case .optionFn: return [.maskAlternate, .maskSecondaryFn]
+        case .controlFn: return [.maskControl, .maskSecondaryFn]
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .commandFn: return "⌘ + Fn"
+        case .optionFn: return "⌥ + Fn"
+        case .controlFn: return "⌃ + Fn"
+        }
+    }
+}
+
 /// keyDown 인터셉트 모드 (TDD §3.1/§2). 코디네이터가 세션 상태 전이에 맞춰 지시한다 —
 /// HotkeyManager는 자체 상태 판단 없이 따르기만 한다 (단방향 규칙).
 /// 조건 실수 = 시스템 전체 Tab/Esc 사망 사고 (macos-quirks) — 게이트는 세션 상태 기준이며
@@ -52,6 +76,10 @@ final class HotkeyManager {
 
     /// 현재 keyDown 인터셉트 모드 — 코디네이터가 전이 시 갱신 (기본 .none = 아무것도 소비 안 함).
     var interceptMode: KeyInterceptMode = .none
+
+    /// 핫키 조합 (설정에서 변경 — 3.3). 이벤트마다 읽으므로 즉시 적용된다.
+    /// 홀드 중 변경되면 새 조합 기준으로 up이 감지되어 세션이 정상 마감된다 (엣지 무해).
+    var combo: HotkeyCombo = .commandFn
 
     /// 디바운스 문턱 (TDD §3.1: down 후 200ms 미만의 up은 취소).
     private let debounceThreshold: TimeInterval = 0.2
@@ -158,12 +186,12 @@ final class HotkeyManager {
         }
 
         let flags = event.flags
-        let comboNow = flags.contains(.maskCommand) && flags.contains(.maskSecondaryFn)
+        let comboNow = flags.contains(combo.requiredFlags)
 
         if comboNow && !comboActive {
             comboActive = true
             comboDownAt = clock.now
-            logger.debug("hotkeyDown (⌘+Fn)")
+            logger.debug("hotkeyDown (\(self.combo.displayName, privacy: .public))")
             delegate?.hotkeyDown()
         } else if !comboNow && comboActive {
             comboActive = false
@@ -230,7 +258,7 @@ final class HotkeyManager {
     private func resyncComboStateAfterReenable() {
         guard comboActive else { return }
         let flags = CGEventSource.flagsState(.combinedSessionState)
-        let comboStillHeld = flags.contains(.maskCommand) && flags.contains(.maskSecondaryFn)
+        let comboStillHeld = flags.contains(combo.requiredFlags)
         if !comboStillHeld {
             comboActive = false
             comboDownAt = nil

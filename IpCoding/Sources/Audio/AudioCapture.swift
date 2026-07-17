@@ -39,6 +39,10 @@ final class AudioCapture {
     /// 정지 상태면 0.
     var currentLevel: Float { sink?.currentLevel ?? 0 }
 
+    /// 고정 입력 장치 UID (설정 — 태스크 3.3, TDD §3.2). nil/해석 실패면 시스템 기본.
+    /// 세션마다 엔진을 새로 만들며 그때 해석하므로 변경은 다음 세션부터 적용된다.
+    var fixedDeviceUID: String?
+
     // MARK: - 마이크 권한 (macOS TCC: kTCCServiceMicrophone)
     // 전제: Hardened Runtime + com.apple.security.device.audio-input 엔타이틀먼트.
     // 엔타이틀먼트가 없으면 아래 요청은 다이얼로그 없이 즉시 거부된다.
@@ -67,6 +71,20 @@ final class AudioCapture {
 
         let engine = AVAudioEngine()
         let input = engine.inputNode
+        // 고정 장치 지정은 반드시 installTap/start 전 + 포맷 조회 전 (2026-07 조사 — 기존
+        // 엔진에서 바꾸면 포맷 미갱신 크래시. 우리는 세션마다 새 엔진이라 이 지점이 안전).
+        // 장치 부재·실패는 세션 실패가 아니라 시스템 기본 폴백 (TDD §3.2).
+        if let uid = fixedDeviceUID {
+            if let deviceID = AudioInputDevices.deviceID(forUID: uid) {
+                do {
+                    try input.auAudioUnit.setDeviceID(deviceID)
+                } catch {
+                    logger.warning("고정 입력 장치 지정 실패 — 시스템 기본 사용: \(String(describing: error), privacy: .public)")
+                }
+            } else {
+                logger.info("고정 입력 장치 미연결 — 시스템 기본 사용")
+            }
+        }
         let inputFormat = input.inputFormat(forBus: 0)
 
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {

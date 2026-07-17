@@ -22,10 +22,14 @@ private final class RefineProgress: @unchecked Sendable {
     private var firstTokenSeen = false
     private var esc = false
 
-    private let firstTokenTimeout: Duration = .seconds(3)
-    private let totalTimeout: Duration = .seconds(8)
+    private let firstTokenTimeout: Duration
+    private let totalTimeout: Duration
 
-    init() { startedAt = clock.now }
+    init(firstTokenTimeout: Duration = .seconds(3), totalTimeout: Duration = .seconds(8)) {
+        self.firstTokenTimeout = firstTokenTimeout
+        self.totalTimeout = totalTimeout
+        startedAt = clock.now
+    }
 
     private var accumulated = ""
 
@@ -86,6 +90,10 @@ final class SessionCoordinator {
     /// 자동 주입 대기시간 N (PRD §10-3 확정: 기본 0.5s — 2026-07-12 도그푸딩). 앱이
     /// UserDefaults/메뉴에서 설정한다 (태스크 2.7). 0 = 즉시 주입 (Tab/Esc 창 사실상 없음).
     var autoInjectDelay: Duration = .milliseconds(500)
+
+    /// LLM 타임아웃 (TDD §3.4 — 설정 가능, 태스크 3.3). 다음 세션의 RefineProgress부터 적용.
+    var llmFirstTokenTimeout: Duration = .seconds(3)
+    var llmTotalTimeout: Duration = .seconds(8)
 
     // 타이밍 계측 (TDD §6, 태스크 2.9). T0 = hotkeyUp, 메모리에만 보관.
     let metrics = MetricsStore()
@@ -274,7 +282,9 @@ final class SessionCoordinator {
             return
         }
 
-        let progress = RefineProgress()
+        let progress = RefineProgress(
+            firstTokenTimeout: llmFirstTokenTimeout, totalTimeout: llmTotalTimeout
+        )
         refineProgress = progress
         do {
             let refined = try await refineEngine.refine(

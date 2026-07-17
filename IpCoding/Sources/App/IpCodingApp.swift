@@ -39,12 +39,23 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        // 자동 주입 대기 N 기본값 등록 (태스크 2.7, PRD §10-3 확정 0.5s) —
-        // 메뉴 체크마크가 이 값을 읽으므로 메뉴 생성보다 먼저 등록해야 한다.
-        UserDefaults.standard.register(defaults: [Self.injectDelayKey: 500])
+        // 설정 기본값 등록 (태스크 2.7·3.3) — 메뉴 체크마크가 읽으므로 메뉴 생성보다 먼저.
+        UserDefaults.standard.register(defaults: [
+            Self.injectDelayKey: 500,
+            SettingsView.hotkeyComboKey: HotkeyCombo.commandFn.rawValue,
+            SettingsView.firstTokenTimeoutKey: 3000,
+            SettingsView.totalTimeoutKey: 8000,
+        ])
         // 목록 외 저장값(수동 편집 등)은 기본값으로 정규화 — 체크마크 실종·이상 지연 방어.
         if !Self.injectDelayOptions.contains(UserDefaults.standard.integer(forKey: Self.injectDelayKey)) {
             UserDefaults.standard.set(500, forKey: Self.injectDelayKey)
+        }
+        // 타임아웃도 동일 정규화 (3.3 리뷰 N2 — 0ms 등 이상값이 즉시 원문 폴백을 유발 방지).
+        if ![2000, 3000, 5000].contains(UserDefaults.standard.integer(forKey: SettingsView.firstTokenTimeoutKey)) {
+            UserDefaults.standard.set(3000, forKey: SettingsView.firstTokenTimeoutKey)
+        }
+        if ![5000, 8000, 12000].contains(UserDefaults.standard.integer(forKey: SettingsView.totalTimeoutKey)) {
+            UserDefaults.standard.set(8000, forKey: SettingsView.totalTimeoutKey)
         }
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -64,6 +75,9 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         let permItem = NSMenuItem(title: "권한 설정…", action: #selector(openOnboardingFromMenu), keyEquivalent: "")
         permItem.target = self
         menu.addItem(permItem)
+        let settingsItem = NSMenuItem(title: "설정…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        menu.addItem(settingsItem)
         menu.addItem(makeInjectDelayMenuItem())
         menu.addItem(makeStatsMenuItem())
         menu.addItem(.separator())
@@ -77,6 +91,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         statusItem = item
 
         coordinator.autoInjectDelay = .milliseconds(UserDefaults.standard.integer(forKey: Self.injectDelayKey))
+        applyStoredSettings()
 
         // 메뉴바 아이콘 상태 연동 (TDD §3.8) — 코디네이터 전이가 구동.
         coordinator.menuBarUpdater = { [weak self] state in
@@ -87,14 +102,25 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         startInput()
     }
 
+    /// Launchpad/Finder에서 앱을 다시 실행하면 설정 창을 연다 (3.3 도그푸딩 피드백 —
+    /// 메뉴바가 꽉 차 아이콘이 가려지면 설정·사전 접근 경로가 사라지는 문제의 우회로).
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openSettings()
+        return false
+    }
+
     // MARK: - 자동 주입 대기 N 메뉴 (태스크 2.7, PRD §10-3)
 
     private static let injectDelayKey = "autoInjectDelayMs"
     private static let injectDelayOptions: Set<Int> = [0, 500, 1000, 1500, 2000]
 
+    private var injectDelaySubmenu: NSMenu?
+
     private func makeInjectDelayMenuItem() -> NSMenuItem {
         let root = NSMenuItem(title: "자동 주입 대기", action: nil, keyEquivalent: "")
         let submenu = NSMenu()
+        submenu.delegate = self  // 설정 창에서 바꿔도 체크마크가 최신이도록 열 때마다 갱신 (3.3)
+        injectDelaySubmenu = submenu
         let current = UserDefaults.standard.integer(forKey: Self.injectDelayKey)
         let options: [(String, Int)] = [
             ("즉시 (Tab/Esc 창 없음)", 0),
@@ -117,6 +143,66 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         coordinator.autoInjectDelay = .milliseconds(ms)
         sender.menu?.items.forEach { $0.state = ($0 === sender) ? .on : .off }
         logger.info("자동 주입 대기 변경 — \(ms, privacy: .public)ms")
+    }
+
+    // MARK: - 설정 창 (태스크 3.3)
+
+    private var settingsWindow: NSWindow?
+
+    /// UserDefaults의 설정값을 런타임 객체에 반영 (시작 시 + 설정 변경 시 공용).
+    private func applyStoredSettings() {
+        let defaults = UserDefaults.standard
+        if let combo = HotkeyCombo(rawValue: defaults.string(forKey: SettingsView.hotkeyComboKey) ?? "") {
+            hotkeyManager.combo = combo
+        }
+        coordinator.llmFirstTokenTimeout = .milliseconds(defaults.integer(forKey: SettingsView.firstTokenTimeoutKey))
+        coordinator.llmTotalTimeout = .milliseconds(defaults.integer(forKey: SettingsView.totalTimeoutKey))
+        let deviceUID = defaults.string(forKey: SettingsView.inputDeviceUIDKey) ?? ""
+        audioCapture.fixedDeviceUID = deviceUID.isEmpty ? nil : deviceUID
+    }
+
+    /// 설정 창 — 온보딩과 같은 비재사용 구조 (닫히면 해제). 재다운로드 Task는 unstructured라
+    /// 창과 독립적으로 백그라운드에서 계속되며, 중복 시작은 ModelManager의 전역 배타
+    /// (activeDownloadId)가 차단한다 (3.3 리뷰 W1 — 정책: 창 닫힘은 취소가 아니다).
+    /// 주입 자기창 가드(2.8)가 이 창의 주입 오염도 막는다.
+    @objc private func openSettings() {
+        if let window = settingsWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let view = SettingsView(
+            modelManager: modelManager,
+            onHotkeyChange: { [weak self] combo in
+                self?.hotkeyManager.combo = combo
+                self?.logger.info("핫키 변경 — \(combo.rawValue, privacy: .public)")
+            },
+            onInjectDelayChange: { [weak self] ms in
+                self?.coordinator.autoInjectDelay = .milliseconds(ms)
+            },
+            onTimeoutChange: { [weak self] firstMs, totalMs in
+                self?.coordinator.llmFirstTokenTimeout = .milliseconds(firstMs)
+                self?.coordinator.llmTotalTimeout = .milliseconds(totalMs)
+            },
+            onInputDeviceChange: { [weak self] uid in
+                self?.audioCapture.fixedDeviceUID = uid
+                self?.logger.info("입력 장치 변경 — \(uid == nil ? "시스템 기본" : "고정 장치", privacy: .public)")
+            }
+        )
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 520),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "입코딩 설정"
+        window.contentView = NSHostingView(rootView: view)
+        window.isReleasedWhenClosed = false  // 해제는 windowWillClose에서 참조 해제로
+        window.delegate = self
+        window.center()
+        settingsWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     // MARK: - 사전 편집 창 (태스크 2.8, TDD §3.6)
@@ -423,8 +509,10 @@ extension IpCodingApp: AudioCaptureDelegate {
 
 extension IpCodingApp: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow, window === onboardingWindow else { return }
-        onboardingWindow = nil  // 참조 해제 → NSHostingView·뷰 .task 폴링이 확정적으로 종료
+        guard let window = notification.object as? NSWindow else { return }
+        // 참조 해제 → NSHostingView·뷰의 .task(폴링/다운로드)가 확정적으로 종료.
+        if window === onboardingWindow { onboardingWindow = nil }
+        if window === settingsWindow { settingsWindow = nil }
     }
 }
 
@@ -432,7 +520,15 @@ extension IpCodingApp: NSWindowDelegate {
 
 extension IpCodingApp: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
-        guard menu === statsSubmenu else { return }  // 다른 메뉴 오염 방지 (리뷰 N4)
-        rebuildStatsMenu(menu)
+        if menu === statsSubmenu {
+            rebuildStatsMenu(menu)
+        } else if menu === injectDelaySubmenu {
+            // 설정 창과 UserDefaults를 공유하므로 열 때 현재 값으로 체크마크 재계산 (3.3).
+            let current = UserDefaults.standard.integer(forKey: Self.injectDelayKey)
+            for item in menu.items {
+                item.state = ((item.representedObject as? Int) == current) ? .on : .off
+            }
+        }
+        // 그 외 메뉴는 건드리지 않는다 (2.9 리뷰 N4).
     }
 }

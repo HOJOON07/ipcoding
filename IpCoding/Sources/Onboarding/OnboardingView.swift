@@ -276,6 +276,8 @@ struct OnboardingView: View {
                         downloadError = "파일 검증에 실패했어요 — 다시 시도해주세요"
                     case ModelManagerError.diskWriteFailed:
                         downloadError = "저장에 실패했어요 — 디스크 공간을 확인해주세요"
+                    case ModelManagerError.anotherDownloadActive:
+                        downloadError = "다른 다운로드가 진행 중이에요 — 완료 후 다시 시도해주세요"
                     default:
                         downloadError = "다운로드에 실패했어요 — 네트워크 확인 후 다시 시도해주세요"
                     }
