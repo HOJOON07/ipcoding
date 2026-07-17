@@ -35,7 +35,8 @@ final class PasteboardInjector: Injecting {
 
         // 대상 앱 로깅 (디버깅용 — HUD가 frontmost가 아님을 보장하는 것이 non-activating 요구의 이유).
         if let front = NSWorkspace.shared.frontmostApplication {
-            logger.info("주입 대상: \(front.bundleIdentifier ?? "unknown", privacy: .public)")
+            // 사용 앱 정보는 privacy 마스킹 (3.4 리뷰 N3 — 코디네이터의 .private와 정렬).
+            logger.info("주입 대상: \(front.bundleIdentifier ?? "unknown", privacy: .private)")
         }
 
         // ③ ⌘V post — 실패 시 전사문이 클립보드에 남지 않도록 복원 후 재-throw.

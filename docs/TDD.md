@@ -169,7 +169,7 @@ protocol Injecting { func inject(_ text: String) async throws }
 ```
 
 - **PasteboardInjector (기본)**: ① `NSPasteboard.general` 현재 아이템 백업(changeCount 기록) ② 텍스트 set ③ CGEvent로 ⌘V post(keyDown→keyUp, `.maskCommand`) ④ 250ms 후 백업 복원(단, 그 사이 changeCount가 또 바뀌었으면 복원 포기 — 사용자 복사 덮어쓰기 방지).
-- **UnicodeEventInjector (옵션)**: `CGEventKeyboardSetUnicodeString`으로 유니코드 직접 주입. 이벤트당 UTF-16 20단위 안팎으로 청크 분할, 청크 사이 1ms 대기. 한글은 완성형 문자열로 들어가므로 IME 조합 미개입.
+- **UnicodeEventInjector (옵션, 3.4 구현)**: `CGEventKeyboardSetUnicodeString`으로 유니코드 직접 주입 (클립보드 미사용). 이벤트당 UTF-16 20단위 안팎으로 청크 분할(서러게이트 쌍 경계 보호), 청크 사이 1ms 대기, 합성 이벤트 flags 비움(하드웨어 수정자 상속 차단). 한글은 완성형 문자열로 들어가므로 IME 조합 미개입. **개행은 공백으로 치환** (2026-07-18 결정) — 키 입력 방식은 bracketed paste 보호가 없어 개행이 터미널에서 즉시 실행되는 사고 차단. 방식 선택은 설정 "주입 방식"(기본 Pasteboard).
 - 대상 검증: 주입 직전 frontmost 앱을 확인하고, **자기 자신이면 클립보드를 건드리지 않고 typed error로 실패 처리한다**(주입 실패 정책 §5). 설정·사전 편집 등 key window가 가능한 자체 창 도입(태스크 2.8) 이후 필요해진 가드로, Injecting 구현 공통 규칙이다(Pasteboard·UnicodeEvent 모두) — 구현은 코디네이터의 주입 선행 검사 한 곳에 둔다(주입기 추가 시 누락 방지). HUD는 non-activating(§3.8)이라 이 가드를 트리거하지 않는다. frontmost 앱 식별자는 디버깅용으로 로깅.
 
 ### 3.8 HUDPanel (2026-07-12 리디자인 — "모핑 오브", 사용자 승인)

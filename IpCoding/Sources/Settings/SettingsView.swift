@@ -11,6 +11,7 @@ struct SettingsView: View {
     /// 빈 문자열 = 시스템 기본 입력 (TDD §3.2).
     static let inputDeviceUIDKey = "inputDeviceUID"
     static let inputDeviceNameKey = "inputDeviceName"
+    static let injectionMethodKey = "injectionMethod"
 
     @AppStorage(SettingsView.hotkeyComboKey) private var hotkeyComboRaw = HotkeyCombo.commandFn.rawValue
     @AppStorage("autoInjectDelayMs") private var injectDelayMs = 500
@@ -18,6 +19,7 @@ struct SettingsView: View {
     @AppStorage(SettingsView.totalTimeoutKey) private var totalTimeoutMs = 8000
     @AppStorage(SettingsView.inputDeviceUIDKey) private var inputDeviceUID = ""
     @AppStorage(SettingsView.inputDeviceNameKey) private var inputDeviceName = ""
+    @AppStorage(SettingsView.injectionMethodKey) private var injectionMethodRaw = InjectionMethod.pasteboard.rawValue
     @State private var inputDevices: [AudioInputDevices.Device] = []
 
     // 모델 관리 (재다운로드 배선 — 3.2 리뷰 N3 이월)
@@ -35,6 +37,7 @@ struct SettingsView: View {
     let onTimeoutChange: (_ firstTokenMs: Int, _ totalMs: Int) -> Void
     /// nil = 시스템 기본.
     let onInputDeviceChange: (String?) -> Void
+    let onInjectionMethodChange: (InjectionMethod) -> Void
 
     var body: some View {
         Form {
@@ -104,6 +107,17 @@ struct SettingsView: View {
                 Text("2.0초").tag(2000)
             }
             .onChange(of: injectDelayMs) { onInjectDelayChange(injectDelayMs) }
+            // 주입 방식 (태스크 3.4, TDD §3.7 — 유니코드는 클립보드 미사용 대신 다소 느림)
+            Picker("주입 방식", selection: $injectionMethodRaw) {
+                ForEach(InjectionMethod.allCases, id: \.rawValue) { method in
+                    Text(method.displayName).tag(method.rawValue)
+                }
+            }
+            .onChange(of: injectionMethodRaw) {
+                if let method = InjectionMethod(rawValue: injectionMethodRaw) {
+                    onInjectionMethodChange(method)
+                }
+            }
         }
     }
 

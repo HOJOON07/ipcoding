@@ -23,7 +23,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
     private let refineEngine = RefineEngine()
     private lazy var userDictionary = UserDictionary(directory: modelManager.modelsDirectory.deletingLastPathComponent())
     private lazy var promptBuilder = PromptBuilder(dictionary: userDictionary)
-    private let injector: any Injecting = PasteboardInjector()
+    private let injector = InjectorRouter()  // 방식 전환은 설정 (태스크 3.4)
     private let hud = HUDController()
     private lazy var coordinator = SessionCoordinator(
         audioCapture: audioCapture,
@@ -45,6 +45,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
             SettingsView.hotkeyComboKey: HotkeyCombo.commandFn.rawValue,
             SettingsView.firstTokenTimeoutKey: 3000,
             SettingsView.totalTimeoutKey: 8000,
+            SettingsView.injectionMethodKey: InjectionMethod.pasteboard.rawValue,
         ])
         // 목록 외 저장값(수동 편집 등)은 기본값으로 정규화 — 체크마크 실종·이상 지연 방어.
         if !Self.injectDelayOptions.contains(UserDefaults.standard.integer(forKey: Self.injectDelayKey)) {
@@ -159,6 +160,9 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         coordinator.llmTotalTimeout = .milliseconds(defaults.integer(forKey: SettingsView.totalTimeoutKey))
         let deviceUID = defaults.string(forKey: SettingsView.inputDeviceUIDKey) ?? ""
         audioCapture.fixedDeviceUID = deviceUID.isEmpty ? nil : deviceUID
+        if let method = InjectionMethod(rawValue: defaults.string(forKey: SettingsView.injectionMethodKey) ?? "") {
+            injector.method = method
+        }
     }
 
     /// 설정 창 — 온보딩과 같은 비재사용 구조 (닫히면 해제). 재다운로드 Task는 unstructured라
@@ -187,6 +191,10 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
             onInputDeviceChange: { [weak self] uid in
                 self?.audioCapture.fixedDeviceUID = uid
                 self?.logger.info("입력 장치 변경 — \(uid == nil ? "시스템 기본" : "고정 장치", privacy: .public)")
+            },
+            onInjectionMethodChange: { [weak self] method in
+                self?.injector.method = method
+                self?.logger.info("주입 방식 변경 — \(method.rawValue, privacy: .public)")
             }
         )
         let window = NSWindow(
