@@ -16,6 +16,9 @@ enum HUDState: Equatable {
     /// 주입 후 결과 유지 카드: 원문·교정 병기 + ✓ — 사용자가 비교를 충분히 관찰하도록
     /// 5s 유지 후 소멸 (도그푸딩 피드백 2026-07-12).
     case injected(raw: String, text: String)
+    /// 주입 실패 유지 카드: 결과 텍스트를 5s 유지해 발화가 증발하지 않게 한다
+    /// (TDD §2 injecting--failed-->idle, §5 주입 실패 정책 최소 이행 — 원칙 3. 태스크 2.8).
+    case injectFailed(raw: String, text: String)
 }
 
 /// HUD가 렌더할 상태와 마이크 레벨을 담는 관찰 모델 (TDD §3.8).

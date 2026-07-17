@@ -23,6 +23,10 @@ final class UserDictionary {
     /// 배제한다(Phase 0 REPORT: 페인/제시도).
     private(set) var entries: [DictionaryEntry] = []
 
+    /// 파일에 기록된 순서 그대로의 사본 (편집 UI 표시용 — entries는 매칭용 정렬본이라
+    /// 사용자가 파일에서 잡아둔 순서를 잃는다).
+    private(set) var fileOrderedEntries: [DictionaryEntry] = []
+
     init(directory: URL) {
         fileURL = directory.appendingPathComponent("dictionary.json")
     }
@@ -31,17 +35,20 @@ final class UserDictionary {
     func load() {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             entries = []
+            fileOrderedEntries = []
             logger.info("사전 파일 없음 — 빈 사전으로 시작")
             return
         }
         do {
             let data = try Data(contentsOf: fileURL)
             let decoded = try JSONDecoder().decode([DictionaryEntry].self, from: data)
+            fileOrderedEntries = decoded
             entries = decoded.sorted { $0.spoken.count > $1.spoken.count }
             logger.info("사전 로드 완료 — \(self.entries.count, privacy: .public)개 항목")
         } catch {
             // 손상된 사전이 파이프라인을 막지 않도록 빈 사전 폴백.
             entries = []
+            fileOrderedEntries = []
             logger.error("사전 로드 실패 — 빈 사전 폴백: \(String(describing: error), privacy: .public)")
         }
     }
@@ -76,6 +83,20 @@ final class UserDictionary {
             }
         }
         return result
+    }
+
+    /// 편집 UI의 저장 경로 (태스크 2.8, TDD §3.6 — 변경 즉시 파일 저장 + 메모리 반영).
+    /// 파일에는 주어진(편집 화면) 순서를 그대로 쓰고, 메모리는 최장매칭 규칙(길이 내림차순)으로
+    /// 정렬해 반영한다. 쓰기 실패 시 메모리를 바꾸지 않는다 — 파일과 메모리의 불일치 방지.
+    func update(_ newEntries: [DictionaryEntry]) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .withoutEscapingSlashes]
+        let data = try encoder.encode(newEntries)
+        try data.write(to: fileURL, options: .atomic)
+        fileOrderedEntries = newEntries
+        entries = newEntries.sorted { $0.spoken.count > $1.spoken.count }
+        // 편집 UI가 키 입력 단위로 호출하므로 debug 레벨 (info면 로그 스팸).
+        logger.debug("사전 갱신 — \(newEntries.count, privacy: .public)개 항목")
     }
 
     // initial_prompt 용어 생성은 PromptBuilder 소관 (TDD §3.3, 태스크 2.3에서 이관).

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os
 
@@ -338,11 +339,23 @@ final class SessionCoordinator {
         transition(to: .injecting)
         var injected = false
         do {
+            // 자기창 가드 (TDD §3.7 대상 검증): frontmost가 자기 자신이면 클립보드를 건드리지
+            // 않고 typed error로 실패 처리 — 사전 편집 등 자체 창의 TextField에 ⌘V가 꽂혀
+            // 대상·사전이 오염되는 사고 차단 (2.8). Injecting 구현 공통 규칙이라 주입기 앞의
+            // 이 한 곳에서 검사한다. check-then-act라 검사~⌘V 착지 사이 수 ms 창에서의 포커스
+            // 전환까지 막지는 못한다(축소이지 절대 보장 아님). frontmost가 nil이면(드묾 —
+            // 식별 불가) 기존 동작대로 주입을 진행한다.
+            let frontmost = NSWorkspace.shared.frontmostApplication
+            if frontmost?.processIdentifier == ProcessInfo.processInfo.processIdentifier {
+                throw InjectionError.selfIsFrontmost
+            }
+            logger.debug("[inject] 대상 앱: \(frontmost?.bundleIdentifier ?? "?", privacy: .private)")
             try await injector.inject(text)
             injected = true
             logger.info("[inject] 주입 완료")
+        } catch InjectionError.selfIsFrontmost {
+            logger.warning("[inject] 자기 앱이 frontmost — 주입 거부 (TDD §3.7 가드)")
         } catch {
-            // 주입 실패 시 HUD 결과 유지 + 복사 버튼은 TDD §5 — HUD 확장(2.5+) 몫. 지금은 로그만.
             logger.error("[inject] 주입 실패: \(String(describing: error), privacy: .public)")
         }
         if injected {
@@ -354,6 +367,10 @@ final class SessionCoordinator {
             // 주입 후 원문·교정 비교 카드를 5s 유지 (도그푸딩 2026-07-12 — 충분한 관찰 시간).
             // 새 세션이 시작되면 즉시 대체된다.
             hud.flash(.injected(raw: raw, text: text), duration: .seconds(5))
+        } else {
+            // injecting --failed--> idle (TDD §2, 2026-07-17): 결과 텍스트를 5s 유지해
+            // 발화가 증발하지 않게 한다 (§5 최소 이행, 원칙 3). 복사 버튼은 후속.
+            hud.flash(.injectFailed(raw: raw, text: text), duration: .seconds(5))
         }
     }
 

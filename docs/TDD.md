@@ -71,6 +71,7 @@ IpCoding/
   awaitingInjection --tabPressed-->    injecting      (raw 주입)
   awaitingInjection --escPressed-->    idle
   injecting     --done-->              idle           (HUD는 원문·교정 비교 카드를 5s 유지 후 소멸 — 도그푸딩 2026-07-12. 새 세션 시작 시 즉시 대체)
+  injecting     --failed-->            idle           (주입 없음 — §5 주입 실패 정책: HUD에 결과 텍스트 유지. 2026-07-17 자기창 가드와 함께 명문화 — ⌘V 무반응 실패에도 원래 필요했던 전이)
 
 전 상태 공통: hotkeyDown은 idle에서만 유효. 세션 중 재입력은 무시(레이스 방지).
 ```
@@ -169,7 +170,7 @@ protocol Injecting { func inject(_ text: String) async throws }
 
 - **PasteboardInjector (기본)**: ① `NSPasteboard.general` 현재 아이템 백업(changeCount 기록) ② 텍스트 set ③ CGEvent로 ⌘V post(keyDown→keyUp, `.maskCommand`) ④ 250ms 후 백업 복원(단, 그 사이 changeCount가 또 바뀌었으면 복원 포기 — 사용자 복사 덮어쓰기 방지).
 - **UnicodeEventInjector (옵션)**: `CGEventKeyboardSetUnicodeString`으로 유니코드 직접 주입. 이벤트당 UTF-16 20단위 안팎으로 청크 분할, 청크 사이 1ms 대기. 한글은 완성형 문자열로 들어가므로 IME 조합 미개입.
-- 대상 검증: 주입 직전 frontmost app을 로깅(디버깅용). 자기 자신(HUD)이 frontmost가 아님을 보장하는 것이 HUD non-activating 요구의 이유.
+- 대상 검증: 주입 직전 frontmost 앱을 확인하고, **자기 자신이면 클립보드를 건드리지 않고 typed error로 실패 처리한다**(주입 실패 정책 §5). 설정·사전 편집 등 key window가 가능한 자체 창 도입(태스크 2.8) 이후 필요해진 가드로, Injecting 구현 공통 규칙이다(Pasteboard·UnicodeEvent 모두) — 구현은 코디네이터의 주입 선행 검사 한 곳에 둔다(주입기 추가 시 누락 방지). HUD는 non-activating(§3.8)이라 이 가드를 트리거하지 않는다. frontmost 앱 식별자는 디버깅용으로 로깅.
 
 ### 3.8 HUDPanel (2026-07-12 리디자인 — "모핑 오브", 사용자 승인)
 
@@ -203,7 +204,7 @@ protocol Injecting { func inject(_ text: String) async throws }
 |---|---|
 | Whisper 빈 결과/실패 | HUD "인식하지 못했어요" 1.5초 표시 후 idle. 주입 없음 |
 | LLM 타임아웃/오류/비정상 출력 | 원문(raw)으로 대체하고 정상 흐름 계속 (PRD 원칙 3) |
-| 주입 실패 (⌘V 무반응 등) | HUD에 결과 텍스트 유지 + "복사" 버튼 제공 |
+| 주입 실패 (⌘V 무반응, 자기 앱이 frontmost 등) | HUD에 결과 텍스트 유지(5s 카드 — 2.8 최소 이행) + "복사" 버튼 제공(후속, HUD 확장 몫) |
 | 클립보드 복원 충돌 | 복원 포기 (사용자 데이터 우선) |
 | 이벤트 탭 비활성화 | 자동 재활성화, 실패 누적 시 메뉴바 경고 아이콘 |
 | 모델 로드 실패 | 재다운로드 플로우 |

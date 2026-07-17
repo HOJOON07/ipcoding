@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import os
 
 /// 앱 엔트리. NSStatusItem(메뉴바)과 생명주기를 소유한다 (TDD §1).
@@ -54,6 +55,9 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "입코딩 v0.1 (Phase 2)", action: nil, keyEquivalent: ""))
         menu.addItem(.separator())
+        let dictItem = NSMenuItem(title: "사전 편집…", action: #selector(openDictionaryEditor), keyEquivalent: "")
+        dictItem.target = self
+        menu.addItem(dictItem)
         menu.addItem(makeInjectDelayMenuItem())
         menu.addItem(makeStatsMenuItem())
         menu.addItem(.separator())
@@ -107,6 +111,57 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         coordinator.autoInjectDelay = .milliseconds(ms)
         sender.menu?.items.forEach { $0.state = ($0 === sender) ? .on : .off }
         logger.info("자동 주입 대기 변경 — \(ms, privacy: .public)ms")
+    }
+
+    // MARK: - 사전 편집 창 (태스크 2.8, TDD §3.6)
+
+    private var dictionaryWindow: NSWindow?
+    /// 저장 실패 알림은 창 세션당 1회 — 편집이 키 입력 단위로 저장되므로 디스크 오류 시
+    /// runModal이 키 입력마다 반복되는 것을 막는다 (실패 자체는 매번 로그).
+    private var dictionarySaveErrorShown = false
+
+    @objc private func openDictionaryEditor() {
+        dictionarySaveErrorShown = false
+        if let window = dictionaryWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        // 표시 순서는 파일 순서 (entries는 매칭용 길이 정렬본 — 그대로 쓰면 첫 저장이
+        // 사용자가 파일에서 잡아둔 순서를 정렬 순서로 덮는다, 리뷰 N1).
+        let editor = DictionaryEditorView(entries: userDictionary.fileOrderedEntries) { [weak self] entries in
+            guard let self else { return }
+            do {
+                try self.userDictionary.update(entries)
+                self.dictionarySaveErrorShown = false  // 오류 해소 후 재발 시 다시 알림 (리뷰 N3)
+            } catch {
+                self.logger.error("사전 저장 실패: \(String(describing: error), privacy: .public)")
+                guard !self.dictionarySaveErrorShown else { return }
+                self.dictionarySaveErrorShown = true
+                // 뷰 갱신 트랜잭션(onDisappear 경유 flushSave) 안에서 runModal 중첩 방지 —
+                // 다음 런루프 턴으로 미룬다 (리뷰 W3).
+                Task { @MainActor in
+                    let alert = NSAlert()
+                    alert.messageText = "사전 저장 실패"
+                    alert.informativeText = "dictionary.json에 쓸 수 없습니다. 디스크 상태 확인 후 다시 편집해주세요."
+                    alert.alertStyle = .warning
+                    alert.runModal()
+                }
+            }
+        }
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 400),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "사전 편집"
+        window.contentView = NSHostingView(rootView: editor)
+        window.isReleasedWhenClosed = false  // 닫아도 인스턴스 재사용 (편집 상태 유지)
+        window.center()
+        dictionaryWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     // MARK: - 타이밍 통계 디버그 메뉴 (태스크 2.9, TDD §6)

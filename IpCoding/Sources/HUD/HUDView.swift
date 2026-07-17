@@ -29,7 +29,7 @@ struct HUDView: View {
     private var sizeClass: SizeClass {
         switch viewModel.state {
         case .recording, .processing: return .orb
-        case .refining, .ready, .injected: return .card
+        case .refining, .ready, .injected, .injectFailed: return .card
         case .error, .hidden: return .badge
         }
     }
@@ -78,6 +78,9 @@ struct HUDView: View {
                 .transition(.opacity)
         case .injected(let raw, let text):
             InjectedCardView(raw: raw, text: text)
+                .transition(.opacity)
+        case .injectFailed(let raw, let text):
+            InjectedCardView(raw: raw, text: text, failed: true)
                 .transition(.opacity)
         case .error(let message):
             ErrorBadgeView(message: message)
@@ -267,9 +270,12 @@ private struct KeycapChip: View {
 
 /// 주입 후 결과 유지 카드: 원문·교정 병기 + ✓ 주입 완료 (5s 유지 — 도그푸딩 2026-07-12).
 /// Tab으로 원문을 주입한 경우(raw == text)엔 "원문" 단일 행 — 교정본 주입으로 오인 방지.
+/// failed=true면 주입 실패 카드 — 같은 레이아웃으로 텍스트를 유지하되 푸터만 경고
+/// (TDD §5 주입 실패 정책 최소 이행, 태스크 2.8).
 private struct InjectedCardView: View {
     let raw: String
     let text: String
+    var failed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -289,10 +295,10 @@ private struct InjectedCardView: View {
                 }
             }
             HStack(spacing: 5) {
-                Image(systemName: "checkmark.circle.fill")
+                Image(systemName: failed ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
                     .font(.system(size: 11))
-                    .foregroundStyle(.green)
-                Text("주입 완료")
+                    .foregroundStyle(failed ? .yellow : .green)
+                Text(failed ? "주입 실패 — 대상 앱을 확인하고 다시 말해주세요" : "주입 완료")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.white.opacity(0.6))
             }
