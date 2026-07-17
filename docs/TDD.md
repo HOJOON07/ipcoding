@@ -185,7 +185,7 @@ protocol Injecting { func inject(_ text: String) async throws }
 ### 3.9 ModelManager
 
 - 모델 메타: `{id, displayName, url(HuggingFace), sha256, sizeBytes, kind(stt|llm)}` 하드코딩 목록.
-- 첫 실행 온보딩에서 다운로드(URLSession downloadTask, 진행률 표시, 이어받기 지원). 완료 후 sha256 검증.
+- 첫 실행 온보딩에서 다운로드(URLSession dataTask 델리게이트 청크 쓰기 + `.partial` Range 이어받기 — 앱 재시작 관통, 진행률 표시). 완료 후 sha256 검증 통과 시에만 최종 파일명으로 승격(최종 파일명 존재 = 검증본 불변식). (2026-07-17: downloadTask/resume data 방식에서 변경 — 재시작 관통 이어받기가 결정적)
 - 로드 실패/파일 손상 시 재다운로드 유도. 설정에서 모델 교체·삭제 가능.
 
 ## 4. 권한 매트릭스

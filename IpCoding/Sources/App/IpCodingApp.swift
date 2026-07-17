@@ -253,7 +253,12 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 태스크 1.4·1.5: 모델 디렉토리 보장 + 사전 로드 + whisper 로드·워밍업.
+    /// 엔진 로드 중복 방지 — 시작 시(설치돼 있으면)와 온보딩 다운로드 완료 시 양쪽에서
+    /// prepareModels가 불릴 수 있다 (태스크 3.2).
+    private var sttLoadStarted = false
+    private var llmLoadStarted = false
+
+    /// 태스크 1.4·1.5: 모델 디렉토리 보장 + 사전 로드 + whisper 로드·워밍업. 멱등.
     private func prepareModels() {
         do {
             try modelManager.ensureModelsDirectory()
@@ -263,17 +268,22 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         userDictionary.load()
         let turbo = ModelManager.whisperTurbo
         guard modelManager.isInstalled(turbo) else {
-            logger.warning("STT 모델 \(turbo.filename, privacy: .public) 없음 — 수동 배치 필요")
+            logger.warning("STT 모델 \(turbo.filename, privacy: .public) 없음 — 온보딩에서 다운로드")
+            prepareRefineEngine()
             return
         }
-        Task {
-            do {
-                let path = try modelManager.resolvedPath(for: turbo)
-                try await transcribeEngine.load(modelPath: path.path)
-                await transcribeEngine.warmUp()
-                logger.info("STT 엔진 준비 완료")
-            } catch {
-                logger.error("STT 엔진 준비 실패: \(String(describing: error), privacy: .public)")
+        if !sttLoadStarted {
+            sttLoadStarted = true
+            Task {
+                do {
+                    let path = try modelManager.resolvedPath(for: turbo)
+                    try await transcribeEngine.load(modelPath: path.path)
+                    await transcribeEngine.warmUp()
+                    logger.info("STT 엔진 준비 완료")
+                } catch {
+                    self.sttLoadStarted = false  // 같은 실행에서 재시도 가능하게 (리뷰 N3)
+                    logger.error("STT 엔진 준비 실패: \(String(describing: error), privacy: .public)")
+                }
             }
         }
 
@@ -281,13 +291,15 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
     }
 
     /// 태스크 2.2·2.3: 교정 LLM 로드 + PromptBuilder 조립 프롬프트로 프리픽스 캐시 준비.
-    /// 파이프라인 배선은 2.4.
+    /// 파이프라인 배선은 2.4. 멱등 (llmLoadStarted).
     private func prepareRefineEngine() {
         let qwen = ModelManager.qwenRefine
         guard modelManager.isInstalled(qwen) else {
-            logger.warning("LLM 모델 \(qwen.filename, privacy: .public) 없음")
+            logger.warning("LLM 모델 \(qwen.filename, privacy: .public) 없음 — 온보딩에서 다운로드")
             return
         }
+        guard !llmLoadStarted else { return }
+        llmLoadStarted = true
         Task {
             do {
                 let parts = try promptBuilder.refinePromptParts()  // 번들 v2 + ChatML (TDD §3.5)
@@ -297,6 +309,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
                 await refineEngine.warmUp()  // Metal 커널·생성 경로 예열 (첫 교정 지연 제거)
                 logger.info("교정 엔진 준비 완료")
             } catch {
+                self.llmLoadStarted = false  // 같은 실행에서 재시도 가능하게 (리뷰 N3)
                 logger.error("교정 엔진 준비 실패: \(String(describing: error), privacy: .public)")
             }
         }
@@ -315,8 +328,9 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
         if !hotkeyManager.start() {
             logger.warning("이벤트 탭 시작 실패 — 손쉬운 사용 미부여, 온보딩으로 유도")
         }
-        // 권한 상태는 앱 시작 시마다 재검사한다 (TDD §4).
-        if AudioCapture.microphoneAuthorization != .authorized || !AXIsProcessTrusted() {
+        // 권한·모델 상태는 앱 시작 시마다 재검사한다 (TDD §4, §3.9).
+        if AudioCapture.microphoneAuthorization != .authorized || !AXIsProcessTrusted()
+            || !modelManager.allModelsInstalled {
             openOnboarding()
         }
     }
@@ -339,6 +353,7 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
             return
         }
         let view = OnboardingView(
+            modelManager: modelManager,
             onAccessibilityGranted: { [weak self] in
                 guard let self else { return }
                 // 부여 전에 만든(또는 실패한) 탭은 부여만으로 살아나지 않는다 — 재생성 필수.
@@ -348,6 +363,10 @@ final class IpCodingApp: NSObject, NSApplicationDelegate {
                 } else {
                     self.logger.warning("부여 감지 후에도 탭 재생성 실패 — 앱 재시작 필요할 수 있음")
                 }
+            },
+            onModelsReady: { [weak self] in
+                // 다운로드·검증 직후 엔진 로드 (멱등 — 이미 로드됐으면 스킵).
+                self?.prepareModels()
             },
             onFinished: { [weak self] in
                 self?.onboardingWindow?.close()
