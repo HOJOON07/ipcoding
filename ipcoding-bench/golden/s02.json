@@ -1,0 +1,4 @@
+{
+ "stt": "useEffect의 cleanup 함수 리턴하는 거 빠졌으니까 추가해줘",
+ "refined": "useEffect 의 cleanup 함수 리턴하는 거 빠졌으니까 추가해줘"
+}

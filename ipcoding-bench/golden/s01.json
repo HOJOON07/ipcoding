@@ -1,0 +1,4 @@
+{
+ "stt": "이 컴포넌트 useState 말고 useReduce으로 리팩토링 해줘",
+ "refined": "이 컴포넌트 useState 말고 useReducer 로 리팩토링 해줘"
+}

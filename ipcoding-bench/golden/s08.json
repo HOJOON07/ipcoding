@@ -1,0 +1,4 @@
+{
+ "stt": "이 API 엔드포인트에 rate limiting mid layer 붙여줘",
+ "refined": "이 API 엔드포인트에 rate limiting 미들웨어를 붙여줘"
+}
