@@ -85,7 +85,7 @@
 | 3.6 | ~~Developer ID 서명 + 공증 파이프라인~~ → **v1.0+ 이관** | **배포 경로 확정 (2026-07-18, 사용자 결정): ADP 미가입 — GitHub + Homebrew tap 무공증 배포.** 공증은 공개 v1.0 시점에 사용자 반응 데이터를 보고 재결정 |
 | 3.7 | ~~Sparkle 자동 업데이트~~ → **v1.0+ 이관 (3.6과 연동)** | 무공증에선 업데이트 산출물에 격리가 붙어 매번 Gatekeeper에 걸림 — 업데이트는 `brew upgrade`가 정책. Sparkle은 공증 도입 시 함께 |
 | 3.8 | 무공증 배포: 빌드·ad-hoc 서명 스크립트 + GitHub Releases(zip) + 커스텀 Homebrew tap(cask) | ✅ 완료. v0.1.0 프리릴리스 공개 + hojoon07/homebrew-ipcoding tap. Homebrew 6 대응(trust 필수·--no-quarantine 제거→설치 후 xattr 안내). 무공증 3함정(iCloud xattr·adhoc+runtime·brew 6)은 VERIFY [3.8] |
-| 3.9 | README / 랜딩 문서 (Mac Whisper 대비 차별점: 완전 로컬, BT 퍼스트, 정돈 파이프라인) | 설치 문서에 brew tap 경로가 1순위. 시스템 요구사항 16GB+ 명시 (§10-6) |
+| 3.9 | README / 랜딩 문서 (Mac Whisper 대비 차별점: 완전 로컬, BT 퍼스트, 정돈 파이프라인) | ✅ 완료. 설치는 brew 4줄(3.8 실증 절차와 자구 일치), 요구사항 명시. 하네스 문서는 docs/HARNESS.md로 이동 |
 | 3.10 | 베타: 지인 개발자 3–5명 온보딩 관찰 | 권한 플로우 이탈 관찰이 목적. 배포는 3.8의 tap 경로 사용 |
 
 **완료 기준**: 클린 맥(권한·모델 없음)에서 `brew install`→온보딩→첫 주입까지 5분 내(모델 다운로드 시간 제외). 무공증 경로의 Gatekeeper 안내가 README와 일치. ~~공증 통과. 자동 업데이트 동작.~~ (v1.0+ 기준으로 이관)
