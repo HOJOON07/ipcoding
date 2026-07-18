@@ -42,6 +42,8 @@ xattr -dr com.apple.quarantine "/Applications/IpCoding.app"
 
 업데이트는 `brew upgrade --cask ipcoding`.
 
+> **`Error: git is unavailable`가 뜬다면** — Xcode Command Line Tools가 없는 컴퓨터입니다. `xcode-select --install` 실행 후(설치 다이얼로그 승인, 수 분 소요) 다시 `brew tap`부터 진행하세요.
+
 ### 수동 설치
 
 [Releases](https://github.com/HOJOON07/ipcoding/releases)에서 zip을 받아 `/Applications`에 옮긴 뒤, 위와 동일하게 격리 해제(또는 "그래도 열기")가 필요합니다.
