@@ -42,7 +42,7 @@ xattr -dr com.apple.quarantine "/Applications/IpCoding.app"
 
 업데이트는 `brew upgrade --cask ipcoding`.
 
-> **`Error: git is unavailable`가 뜬다면** — Xcode Command Line Tools가 없는 컴퓨터입니다. `xcode-select --install` 실행 후(설치 다이얼로그 승인, 수 분 소요) 다시 `brew tap`부터 진행하세요.
+> **`Error: git is unavailable`가 뜬다면** — Xcode Command Line Tools가 없거나 깨진 컴퓨터입니다 (`brew install git`으로는 해결되지 않습니다 — brew 자체가 git을 먼저 요구합니다). `xcode-select --install` 실행 후(다이얼로그 승인, 수 분 소요) 다시 `brew tap`부터 진행하세요. `xcode-select -p`가 경로를 출력하는데도 같은 에러라면(macOS 업그레이드 후 흔함): `sudo rm -rf /Library/Developer/CommandLineTools && xcode-select --install`.
 
 ### 수동 설치
 
